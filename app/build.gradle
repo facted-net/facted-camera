@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 24
+    compileSdkVersion 25
     buildToolsVersion "25.0.0"
     compileOptions.encoding = 'UTF-8'
 
@@ -32,5 +32,6 @@ android {
 
 dependencies {
     compile 'com.android.support:support-v4:24.0.0'
+    compile 'com.github.1AmOXsGnfXdbNg3RMTyPCHkn2aT:provenj:v1.0.0'
     testCompile 'junit:junit:4.12'
 }
