@@ -196,7 +196,7 @@ public class DrawPreview {
     	int mins = (int)(time % 60);
     	time /= 60;
     	long hours = time;
-    	return String.format(Locale.getDefault(), "%d:%02d:%02d", hours, mins, secs);
+    	return hours + ":" + String.format(Locale.getDefault(), "%02d", mins) + ":" + String.format(Locale.getDefault(), "%02d", secs);
     }
 
 	public void onDrawPreview(Canvas canvas) {
