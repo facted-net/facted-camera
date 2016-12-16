@@ -27,11 +27,12 @@ android {
 
     lintOptions {
         checkReleaseBuilds false
+        abortOnError false
     }
 }
 
 dependencies {
     compile 'com.android.support:support-v4:25.0.1'
-    compile 'com.github.1AmOXsGnfXdbNg3RMTyPCHkn2aT:provenj:v1.0.0'
+    compile 'com.github.1AmOXsGnfXdbNg3RMTyPCHkn2aT:provenj:v1.1.0'
     testCompile 'junit:junit:4.12'
 }
