@@ -1,4 +1,5 @@
 apply plugin: 'com.android.application'
+apply plugin: 'me.tatarka.retrolambda'
 
 android {
     compileSdkVersion 25
@@ -9,13 +10,20 @@ android {
         applicationId "net.sourceforge.opencamera"
         minSdkVersion 15
         targetSdkVersion 25
+        jackOptions {
+          enabled true
+        }
 
-		renderscriptTargetApi 20
+		    renderscriptTargetApi 20
 		//renderscriptSupportModeEnabled true // don't use support library as it bloats the APK, and we don't need pre-4.4 support
 		//need build tools higher than 20 at least to support ScriptIntrinsicHistogram
 
         testApplicationId "net.sourceforge.opencamera.test"
         testInstrumentationRunner "android.test.InstrumentationTestRunner"
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 
     buildTypes {
@@ -33,6 +41,6 @@ android {
 
 dependencies {
     compile 'com.android.support:support-v4:25.0.1'
-    compile 'com.github.1AmOXsGnfXdbNg3RMTyPCHkn2aT:provenj:v1.1.0'
+    compile 'com.github.1AmOXsGnfXdbNg3RMTyPCHkn2aT:provenj:v2.0.0'
     testCompile 'junit:junit:4.12'
 }

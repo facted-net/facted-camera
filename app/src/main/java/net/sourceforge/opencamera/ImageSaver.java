@@ -9,6 +9,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -37,6 +38,11 @@ import android.media.Image;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
+
+import com.adobe.internal.xmp.XMPException;
+
+import provenj.Enclosure;
+import provenj.Metadata;
 
 /** Handles the saving (and any required processing) of photos.
  */
@@ -1283,6 +1289,13 @@ public class ImageSaver extends Thread {
 	            	storageUtils.clearLastMediaScanned();
 	            }
 
+				// apply Proven tags
+				Metadata metadata = new Metadata();
+				metadata.setFileName(picFile.getName());
+				Enclosure enclosure = new Enclosure();
+				metadata = enclosure.fill(picFile, metadata, true);
+				enclosure.publish();
+
 	            if( saveUri != null ) {
 	            	copyFileToUri(main_activity, saveUri, picFile);
 	    		    success = true;
@@ -1325,9 +1338,19 @@ public class ImageSaver extends Thread {
     			Log.e(TAG, "I/O error writing file: " + e.getMessage());
             e.printStackTrace();
             main_activity.getPreview().showToast(null, R.string.failed_to_save_photo);
-        }
+        } catch (XMPException e) {
+			if( MyDebug.LOG )
+				Log.e(TAG, "XMP exception tagging file: " + e.getMessage());
+			e.printStackTrace();
+			main_activity.getPreview().showToast(null, R.string.failed_to_save_photo);
+		} catch (NoSuchAlgorithmException e) {
+			if( MyDebug.LOG )
+				Log.e(TAG, "Algorithm exception tagging file: " + e.getMessage());
+			e.printStackTrace();
+			main_activity.getPreview().showToast(null, R.string.failed_to_save_photo);
+		}
 
-        if( success && saveUri == null ) {
+		if( success && saveUri == null ) {
         	applicationInterface.addLastImage(picFile, share_image);
         }
         else if( success && storageUtils.isUsingSAF() ){
