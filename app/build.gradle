@@ -16,11 +16,14 @@ android {
 
         testApplicationId "net.sourceforge.opencamera.test"
         testInstrumentationRunner "android.test.InstrumentationTestRunner"
+        jackOptions {
+          enabled true
+        }
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_7
-        targetCompatibility JavaVersion.VERSION_1_7
+      sourceCompatibility JavaVersion.VERSION_1_8
+      targetCompatibility JavaVersion.VERSION_1_8
     }
 
     buildTypes {
