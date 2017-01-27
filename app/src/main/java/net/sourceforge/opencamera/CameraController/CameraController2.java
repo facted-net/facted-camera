@@ -20,6 +20,7 @@ import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
+import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.DngCreator;
@@ -38,6 +39,7 @@ import android.os.HandlerThread;
 import android.support.annotation.NonNull;
 import android.util.Log;
 import android.util.Range;
+import android.util.SizeF;
 import android.view.Display;
 import android.view.Surface;
 import android.view.SurfaceHolder;
@@ -60,6 +62,7 @@ public class CameraController2 extends CameraController {
 	private CameraCaptureSession captureSession;
 	private CaptureRequest.Builder previewBuilder;
 	private AutoFocusCallback autofocus_cb;
+	private boolean capture_follows_autofocus_hint;
 	private FaceDetectionListener face_detection_listener;
 	private final Object image_reader_lock = new Object(); // lock to make sure we only handle one image being available at a time
 	private final Object open_camera_lock = new Object(); // lock to wait for camera to be opened from CameraDevice.StateCallback
@@ -121,6 +124,7 @@ public class CameraController2 extends CameraController {
 	private boolean sounds_enabled = true;
 
 	private boolean capture_result_is_ae_scanning;
+	private boolean capture_result_needs_flash; // whether flash will fire
 	private boolean capture_result_has_iso;
 	private int capture_result_iso;
 	private boolean capture_result_has_exposure_time;
@@ -290,7 +294,14 @@ public class CameraController2 extends CameraController {
 				}
 				builder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF);
 				builder.set(CaptureRequest.SENSOR_SENSITIVITY, iso);
-				builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, exposure_time);
+				long actual_exposure_time = exposure_time;
+				if( !is_still ) {
+					// if this isn't for still capture, have a max exposure time of 1/12s
+					actual_exposure_time = Math.min(exposure_time, 1000000000L/12);
+					if( MyDebug.LOG )
+						Log.d(TAG, "actually using exposure_time of: " + actual_exposure_time);
+				}
+				builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, actual_exposure_time);
 				// for now, flash is disabled when using manual iso - it seems to cause ISO level to jump to 100 on Nexus 6 when flash is turned on!
 				builder.set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_OFF);
 				// set flash via CaptureRequest.FLASH
@@ -321,16 +332,20 @@ public class CameraController2 extends CameraController {
 					builder.set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_OFF);
 		    	}
 		    	else if( flash_value.equals("flash_auto") ) {
-		    		if( use_fake_precapture || CameraController2.this.want_expo_bracketing )
+					// note we set this even in fake flash mode (where we manually turn torch on and off to simulate flash) so we
+					// can read the FLASH_REQUIRED state to determine if flash is required
+		    		/*if( use_fake_precapture || CameraController2.this.want_expo_bracketing )
 			    		builder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON);
-		    		else
+		    		else*/
 		    			builder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON_AUTO_FLASH);
 					builder.set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_OFF);
 		    	}
 		    	else if( flash_value.equals("flash_on") ) {
-		    		if( use_fake_precapture || CameraController2.this.want_expo_bracketing )
+					// see note above for "flash_auto" for why we set this even fake flash mode - arguably we don't need to know
+					// about FLASH_REQUIRED in flash_on mode, but we set it for consistency...
+		    		/*if( use_fake_precapture || CameraController2.this.want_expo_bracketing )
 			    		builder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON);
-		    		else
+		    		else*/
 		    			builder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON_ALWAYS_FLASH);
 					builder.set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_OFF);
 		    	}
@@ -527,6 +542,8 @@ public class CameraController2 extends CameraController {
 	private CaptureRequest push_repeating_request_when_torch_off_id = null;
 	/*private boolean push_set_ae_lock = false;
 	private CaptureRequest push_set_ae_lock_id = null;*/
+
+	private CaptureRequest fake_precapture_turn_on_torch_id = null; // the CaptureRequest used to turn on torch when starting the "fake" precapture
 
 	@Override
 	public void onError() {
@@ -960,15 +977,21 @@ public class CameraController2 extends CameraController {
 			}
 		}
 
-		int [] capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES); 
+		int [] capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
 		boolean capabilities_raw = false;
+		boolean capabilities_high_speed_video = false;
 		for(int capability : capabilities) {
 			if( capability == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW ) {
 				capabilities_raw = true;
 			}
+			else if( capability == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_CONSTRAINED_HIGH_SPEED_VIDEO ) {
+				capabilities_high_speed_video = true;
+			}
 		}
-		if( MyDebug.LOG )
+		if( MyDebug.LOG ) {
 			Log.d(TAG, "capabilities_raw?: " + capabilities_raw);
+			Log.d(TAG, "capabilities_high_speed_video?: " + capabilities_high_speed_video);
+		}
 
 		StreamConfigurationMap configs = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
 
@@ -1020,6 +1043,18 @@ public class CameraController2 extends CameraController {
 			if( camera_size.getWidth() > 4096 || camera_size.getHeight() > 2160 )
 				continue; // Nexus 6 returns these, even though not supported?!
 			camera_features.video_sizes.add(new CameraController.Size(camera_size.getWidth(), camera_size.getHeight()));
+		}
+
+		if( capabilities_high_speed_video ) {
+			android.util.Size[] camera_video_sizes_high_speed = configs.getHighSpeedVideoSizes();
+			camera_features.video_sizes_high_speed = new ArrayList<>();
+			for (android.util.Size camera_size : camera_video_sizes_high_speed) {
+				if (MyDebug.LOG)
+					Log.d(TAG, "high speed video size: " + camera_size.getWidth() + " x " + camera_size.getHeight());
+				if (camera_size.getWidth() > 4096 || camera_size.getHeight() > 2160)
+					continue; // just in case? see above
+				camera_features.video_sizes_high_speed.add(new CameraController.Size(camera_size.getWidth(), camera_size.getHeight()));
+			}
 		}
 
 		android.util.Size [] camera_preview_sizes = configs.getOutputSizes(SurfaceTexture.class);
@@ -1092,6 +1127,24 @@ public class CameraController2 extends CameraController {
 		camera_features.exposure_step = characteristics.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP).floatValue();
 
 		camera_features.can_disable_shutter_sound = true;
+
+		{
+			// Calculate view angles
+			// Note this is an approximation (see http://stackoverflow.com/questions/39965408/what-is-the-android-camera2-api-equivalent-of-camera-parameters-gethorizontalvie ).
+			// Potentially we could do better, taking into account the aspect ratio of the current resolution.
+			// Note that we'd want to distinguish between the field of view of the preview versus the photo (or view) (for example,
+			// DrawPreview would want the preview's field of view).
+			// Also if we wanted to do this, we'd need to make sure that this was done after the caller had set the desired preview
+			// and photo/video resolutions.
+			SizeF physical_size = characteristics.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE);
+			float [] focal_lengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+			camera_features.view_angle_x = (float)Math.toDegrees(2.0 * Math.atan2(physical_size.getWidth(), (2.0 * focal_lengths[0])));
+			camera_features.view_angle_y = (float)Math.toDegrees(2.0 * Math.atan2(physical_size.getHeight(), (2.0 * focal_lengths[0])));
+			if( MyDebug.LOG ) {
+				Log.d(TAG, "view_angle_x: " + camera_features.view_angle_x);
+				Log.d(TAG, "view_angle_y: " + camera_features.view_angle_y);
+			}
+		}
 
 		return camera_features;
 	}
@@ -1537,6 +1590,11 @@ public class CameraController2 extends CameraController {
 			}
 			e.printStackTrace();
 		}
+	}
+
+	@Override
+	public boolean isManualISO() {
+		return camera_settings.has_iso;
 	}
 
 	@Override
@@ -2897,9 +2955,11 @@ public class CameraController2 extends CameraController {
 	}
 
 	@Override
-	public void autoFocus(final AutoFocusCallback cb) {
-		if( MyDebug.LOG )
+	public void autoFocus(final AutoFocusCallback cb, boolean capture_follows_autofocus_hint) {
+		if( MyDebug.LOG ) {
 			Log.d(TAG, "autoFocus");
+			Log.d(TAG, "capture_follows_autofocus_hint? " + capture_follows_autofocus_hint);
+		}
 		fake_precapture_torch_focus_performed = false;
 		if( camera == null || captureSession == null ) {
 			if( MyDebug.LOG )
@@ -2924,6 +2984,7 @@ public class CameraController2 extends CameraController {
 			 *    This seems to happen with scenes that have both light and dark regions.
 			 *  (All tested on Nexus 6, Android 6.)
 			 */
+			this.capture_follows_autofocus_hint = capture_follows_autofocus_hint;
 			this.autofocus_cb = cb;
 			return;
 		}
@@ -2931,6 +2992,7 @@ public class CameraController2 extends CameraController {
 			if( MyDebug.LOG )
 				Log.d(TAG, "already waiting for an autofocus");
 			// need to update the callback!
+			this.capture_follows_autofocus_hint = capture_follows_autofocus_hint;
 			this.autofocus_cb = cb;
 			return;
 		}*/
@@ -2951,13 +3013,14 @@ public class CameraController2 extends CameraController {
 		}
 		state = STATE_WAITING_AUTOFOCUS;
 		precapture_state_change_time_ms = -1;
+		this.capture_follows_autofocus_hint = capture_follows_autofocus_hint;
 		this.autofocus_cb = cb;
 		// Camera2Basic sets a trigger with capture
 		// Google Camera sets to idle with a repeating request, then sets af trigger to start with a capture
 		try {
 			if( use_fake_precapture_mode && !camera_settings.has_iso ) {
 				boolean want_flash = false;
-				if( camera_settings.flash_value.equals("flash_auto") ) {
+				if( camera_settings.flash_value.equals("flash_auto") || camera_settings.flash_value.equals("flash_frontscreen_auto") ) {
 					// calling fireAutoFlash() also caches the decision on whether to flash - otherwise if the flash fires now, we'll then think the scene is bright enough to not need the flash!
 					if( fireAutoFlash() )
 						want_flash = true;
@@ -2968,11 +3031,27 @@ public class CameraController2 extends CameraController {
 				if( want_flash ) {
 					if( MyDebug.LOG )
 						Log.d(TAG, "turn on torch for fake flash");
-					//afBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON_ALWAYS_FLASH);
+					afBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON);
 					afBuilder.set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_TORCH);
+					test_fake_flash_focus++;
 					fake_precapture_torch_focus_performed = true;
+					setRepeatingRequest(afBuilder.build());
+					// We sleep for a short time as on some devices (e.g., OnePlus 3T), the torch will turn off when autofocus
+					// completes even if we don't want that (because we'll be taking a photo).
+					// Note that on other devices such as Nexus 6, this problem doesn't occur even if we don't have a separate
+					// setRepeatingRequest.
+					// Update for 1.37: now we do need this for Nexus 6 too, after switching to setting CONTROL_AE_MODE_ON_AUTO_FLASH
+					// or CONTROL_AE_MODE_ON_ALWAYS_FLASH even for fake flash (see note in CameraSettings.setAEMode()) - and we
+					// needed to increase to 200ms! Otherwise photos come out too dark for flash on if doing touch to focus then
+					// quickly taking a photo. (It also work to previously switch to CONTROL_AE_MODE_ON/FLASH_MODE_OFF first,
+					// but then the same problem shows up on OnePlus 3T again!)
+					try {
+						Thread.sleep(200);
+					}
+					catch(InterruptedException e) {
+						e.printStackTrace();
+					}
 				}
-				// CONTROL_AE_MODE is set back to flash auto after the capture is completed
 			}
 			afBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE);
 			setRepeatingRequest(afBuilder.build());
@@ -2990,8 +3069,18 @@ public class CameraController2 extends CameraController {
 			precapture_state_change_time_ms = -1;
 			autofocus_cb.onAutoFocus(false);
 			autofocus_cb = null;
-		} 
+			this.capture_follows_autofocus_hint = false;
+		}
 		afBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE); // ensure set back to idle
+	}
+
+	@Override
+	public void setCaptureFollowAutofocusHint(boolean capture_follows_autofocus_hint) {
+		if( MyDebug.LOG ) {
+			Log.d(TAG, "setCaptureFollowAutofocusHint");
+			Log.d(TAG, "capture_follows_autofocus_hint? " + capture_follows_autofocus_hint);
+		}
+		this.capture_follows_autofocus_hint = capture_follows_autofocus_hint;
 	}
 
 	@Override
@@ -3018,6 +3107,7 @@ public class CameraController2 extends CameraController {
 		}
     	previewBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE);
 		this.autofocus_cb = null;
+		this.capture_follows_autofocus_hint = false;
 		state = STATE_NORMAL;
 		precapture_state_change_time_ms = -1;
 		try {
@@ -3084,8 +3174,11 @@ public class CameraController2 extends CameraController {
 			stillBuilder.setTag(RequestTag.CAPTURE);
 			camera_settings.setupBuilder(stillBuilder, true);
 			if( use_fake_precapture_mode && fake_precapture_torch_performed ) {
+				if( MyDebug.LOG )
+					Log.d(TAG, "setting torch for capture");
 				stillBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON);
 				stillBuilder.set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_TORCH);
+				test_fake_flash_photo++;
 			}
 			if( !camera_settings.has_iso && this.optimise_ae_for_dro && capture_result_has_exposure_time && (camera_settings.flash_value.equals("flash_off") || camera_settings.flash_value.equals("flash_auto") || camera_settings.flash_value.equals("flash_frontscreen_auto") ) ) {
 				final double full_exposure_time_scale = Math.pow(2.0, -0.5);
@@ -3133,6 +3226,13 @@ public class CameraController2 extends CameraController {
     			stillBuilder.addTarget(imageReaderRaw.getSurface());
 
 			captureSession.stopRepeating(); // need to stop preview before capture (as done in Camera2Basic; otherwise we get bugs such as flash remaining on after taking a photo with flash)
+			if( jpeg_cb != null ) {
+				if( MyDebug.LOG )
+					Log.d(TAG, "call onStarted() in callback");
+				jpeg_cb.onStarted();
+			}
+			if( MyDebug.LOG )
+				Log.d(TAG, "capture with stillBuilder");
 			captureSession.capture(stillBuilder.build(), previewCaptureCallback, handler);
 			if( sounds_enabled ) // play shutter sound asap, otherwise user has the illusion of being slow to take photos
 				media_action_sound.play(MediaActionSound.SHUTTER_CLICK);
@@ -3171,7 +3271,7 @@ public class CameraController2 extends CameraController {
 
 			CaptureRequest.Builder stillBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
 			stillBuilder.set(CaptureRequest.CONTROL_CAPTURE_INTENT, CaptureRequest.CONTROL_CAPTURE_INTENT_STILL_CAPTURE);
-			stillBuilder.setTag(RequestTag.CAPTURE);
+			// n.b., don't set RequestTag.CAPTURE here - we only do it for the last of the burst captures (see below)
 			camera_settings.setupBuilder(stillBuilder, true);
 			clearPending();
         	Surface surface = getPreviewSurface();
@@ -3193,9 +3293,16 @@ public class CameraController2 extends CameraController {
 			stillBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF);
 			if( use_fake_precapture_mode && fake_precapture_torch_performed ) {
 				stillBuilder.set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_TORCH);
+				test_fake_flash_photo++;
 			}
 			// else don't turn torch off, as user may be in torch on mode
-			if( capture_result_has_iso )
+
+			// obtain current ISO/etc settings from the capture result - but if we're in manual ISO mode,
+			// might as well use the settings the user has actually requested (also useful for workaround for
+			// OnePlus 3T bug where the reported ISO and exposure_time are wrong in dark scenes)
+			if( camera_settings.has_iso )
+				stillBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, camera_settings.iso );
+			else if( capture_result_has_iso )
 				stillBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, capture_result_iso );
 			else
 				stillBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, 800);
@@ -3205,7 +3312,9 @@ public class CameraController2 extends CameraController {
 				stillBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, 1000000000L/30);
 
 			long base_exposure_time = 1000000000L/30;
-			if( capture_result_has_exposure_time )
+			if( camera_settings.has_iso )
+				base_exposure_time = camera_settings.exposure_time;
+			else if( capture_result_has_exposure_time )
 				base_exposure_time = capture_result_exposure_time;
 
 			int n_half_images = expo_bracketing_n_images/2;
@@ -3269,6 +3378,15 @@ public class CameraController2 extends CameraController {
 						Log.d(TAG, "    exposure_time: " + exposure_time);
 					}
 					stillBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, exposure_time);
+					if( i == n_half_images - 1 ) {
+						// RequestTag.CAPTURE should only be set for the last request, otherwise we'll may do things like turning
+						// off torch (for fake flash) before all images are received
+						// More generally, doesn't seem a good idea to be doing the post-capture commands (resetting ae state etc)
+						// multiple times, and before all captures are complete!
+						if( MyDebug.LOG )
+							Log.d(TAG, "set RequestTag.CAPTURE for last burst request");
+						stillBuilder.setTag(RequestTag.CAPTURE);
+					}
 					requests.add( stillBuilder.build() );
 				}
 			}
@@ -3279,10 +3397,18 @@ public class CameraController2 extends CameraController {
 
 			captureSession.stopRepeating(); // see note under takePictureAfterPrecapture()
 
+			if( jpeg_cb != null ) {
+				if( MyDebug.LOG )
+					Log.d(TAG, "call onStarted() in callback");
+				jpeg_cb.onStarted();
+			}
+
 			if( use_expo_fast_burst ) {
 				if( MyDebug.LOG )
 					Log.d(TAG, "using fast burst");
-				captureSession.captureBurst(requests, previewCaptureCallback, handler);
+				int sequenceId = captureSession.captureBurst(requests, previewCaptureCallback, handler);
+				if( MyDebug.LOG )
+					Log.d(TAG, "sequenceId: " + sequenceId);
 			}
 			else {
 				if( MyDebug.LOG )
@@ -3335,6 +3461,8 @@ public class CameraController2 extends CameraController {
 	    	precapture_state_change_time_ms = System.currentTimeMillis();
 
 	    	// first set precapture to idle - this is needed, otherwise we hang in state STATE_WAITING_PRECAPTURE_START, because precapture already occurred whilst autofocusing, and it doesn't occur again unless we first set the precapture trigger to idle
+			if( MyDebug.LOG )
+				Log.d(TAG, "capture with precaptureBuilder");
 			captureSession.capture(precaptureBuilder.build(), previewCaptureCallback, handler);
 			captureSession.setRepeatingRequest(precaptureBuilder.build(), previewCaptureCallback, handler);
 
@@ -3361,8 +3489,11 @@ public class CameraController2 extends CameraController {
 		if( MyDebug.LOG )
 			Log.d(TAG, "runFakePrecapture");
 		if( camera_settings.flash_value.equals("flash_auto") || camera_settings.flash_value.equals("flash_on") ) {
+			if( MyDebug.LOG )
+				Log.d(TAG, "turn on torch");
 			previewBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON);
 			previewBuilder.set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_TORCH);
+			test_fake_flash_precapture++;
 			fake_precapture_torch_performed = true;
 		}
 		else if( camera_settings.flash_value.equals("flash_frontscreen_auto") || camera_settings.flash_value.equals("flash_frontscreen_on") ) {
@@ -3379,12 +3510,18 @@ public class CameraController2 extends CameraController {
 		else {
 			if( MyDebug.LOG )
 				Log.e(TAG, "runFakePrecapture called with unexpected flash value: " + camera_settings.flash_value);
-			
 		}
     	state = STATE_WAITING_FAKE_PRECAPTURE_START;
     	precapture_state_change_time_ms = System.currentTimeMillis();
+		fake_precapture_turn_on_torch_id = null;
 		try {
-			setRepeatingRequest();
+			CaptureRequest request = previewBuilder.build();
+			if( fake_precapture_torch_performed ) {
+				fake_precapture_turn_on_torch_id = request;
+				if( MyDebug.LOG )
+					Log.d(TAG, "fake_precapture_turn_on_torch_id: " + request);
+			}
+			setRepeatingRequest(request);
 		}
 		catch(CameraAccessException e) {
 			if( MyDebug.LOG ) {
@@ -3410,23 +3547,35 @@ public class CameraController2 extends CameraController {
 		if( MyDebug.LOG )
 			Log.d(TAG, "fireAutoFlash");
 		long time_now = System.currentTimeMillis();
+		if( MyDebug.LOG && fake_precapture_use_flash_time_ms != -1 ) {
+			Log.d(TAG, "fake_precapture_use_flash_time_ms: " + fake_precapture_use_flash_time_ms);
+			Log.d(TAG, "time_now: " + time_now);
+			Log.d(TAG, "time since last flash auto decision: " + (time_now - fake_precapture_use_flash_time_ms));
+		}
 		final long cache_time_ms = 3000; // needs to be at least the time of a typical autoflash, see comment for this function above
 		if( fake_precapture_use_flash_time_ms != -1 && time_now - fake_precapture_use_flash_time_ms < cache_time_ms ) {
 			if( MyDebug.LOG )
 				Log.d(TAG, "use recent decision: " + fake_precapture_use_flash);
+			fake_precapture_use_flash_time_ms = time_now;
 			return fake_precapture_use_flash;
 		}
-		if( MyDebug.LOG && fake_precapture_use_flash_time_ms != -1 )
-			Log.d(TAG, "time since last flash auto decision: " + (time_now - fake_precapture_use_flash_time_ms));
 		fake_precapture_use_flash_time_ms = time_now;
-		/** iso_threshold fine-tuned for Nexus 6 - front camera ISO never goes above 805, but a threshold of 700 is too low
-		 */
-		int iso_threshold = camera_settings.flash_value.equals("flash_frontscreen_auto") ? 750 : 1000;
-		fake_precapture_use_flash = capture_result_has_iso && capture_result_iso >= iso_threshold;
-		if( MyDebug.LOG ) {
-			Log.d(TAG, "fake_precapture_use_flash: " + fake_precapture_use_flash);
-			Log.d(TAG, "    ISO was: " + capture_result_iso);
+		if( camera_settings.flash_value.equals("flash_auto") ) {
+			fake_precapture_use_flash = capture_result_needs_flash;
 		}
+		else if( camera_settings.flash_value.equals("flash_frontscreen_auto") ) {
+			// iso_threshold fine-tuned for Nexus 6 - front camera ISO never goes above 805, but a threshold of 700 is too low
+			int iso_threshold = camera_settings.flash_value.equals("flash_frontscreen_auto") ? 750 : 1000;
+			fake_precapture_use_flash = capture_result_has_iso && capture_result_iso >= iso_threshold;
+			if( MyDebug.LOG )
+				Log.d(TAG, "    ISO was: " + capture_result_iso);
+		}
+		else {
+			// shouldn't really be calling this function if not flash auto...
+			fake_precapture_use_flash = false;
+		}
+		if( MyDebug.LOG )
+			Log.d(TAG, "fake_precapture_use_flash: " + fake_precapture_use_flash);
 		return fake_precapture_use_flash;
 	}
 	
@@ -3468,17 +3617,48 @@ public class CameraController2 extends CameraController {
 				// fake precapture works by turning on torch (or using a "front screen flash"), so we can't use the camera's own decision for flash auto
 				// instead we check the current ISO value
 				boolean auto_flash = camera_settings.flash_value.equals("flash_auto") || camera_settings.flash_value.equals("flash_frontscreen_auto");
+				Integer flash_mode = previewBuilder.get(CaptureRequest.FLASH_MODE);
+				if( MyDebug.LOG )
+					Log.d(TAG, "flash_mode: " + flash_mode);
 				if( auto_flash && !fireAutoFlash() ) {
 					if( MyDebug.LOG )
 						Log.d(TAG, "fake precapture flash auto: seems bright enough to not need flash");
 					takePictureAfterPrecapture();
+				}
+				else if( flash_mode != null && flash_mode == CameraMetadata.FLASH_MODE_TORCH ) {
+					if( MyDebug.LOG )
+						Log.d(TAG, "fake precapture flash: torch already on (presumably from autofocus)");
+					// On some devices (e.g., OnePlus 3T), if we've already turned on torch for an autofocus immediately before
+					// taking the photo, ae convergence may have already occurred - so if we called runFakePrecapture(), we'd just get
+					// stuck waiting for CONTROL_AE_STATE_SEARCHING which will never happen, until we hit the timeout - it works,
+					// but it means taking photos is slower as we have to wait until the timeout
+					// Instead we assume that ae scanning has already started, so go straight to STATE_WAITING_FAKE_PRECAPTURE_DONE,
+					// which means wait until we're no longer CONTROL_AE_STATE_SEARCHING.
+					// (Note, we don't want to go straight to takePictureAfterPrecapture(), as it might be that ae scanning is still
+					// taking place.)
+					// An alternative solution would be to switch torch off and back on again to cause ae scanning to start - but
+					// at worst this is tricky to get working, and at best, taking photos would be slower.
+					fake_precapture_torch_performed = true; // so we know to fire the torch when capturing
+					test_fake_flash_precapture++; // for testing, should treat this same as if we did do the precapture
+					state = STATE_WAITING_FAKE_PRECAPTURE_DONE;
+					precapture_state_change_time_ms = System.currentTimeMillis();
 				}
 				else {
 					runFakePrecapture();
 				}
 			}
 			else {
-				runPrecapture();
+				// standard flash, flash auto or on
+				if( camera_settings.flash_value.equals("flash_auto") && !capture_result_needs_flash ) {
+					// if we call precapture anyway, flash wouldn't fire - but we tend to have a pause
+					// so skipping the precapture if flash isn't going to fire makes this faster
+					if( MyDebug.LOG )
+						Log.d(TAG, "flash auto, but we don't need flash");
+					takePictureAfterPrecapture();
+				}
+				else {
+					runPrecapture();
+				}
 			}
 		}
 
@@ -3629,32 +3809,73 @@ public class CameraController2 extends CameraController {
 		private long last_process_frame_number = 0;
 		private int last_af_state = -1;
 
+		public void onCaptureBufferLost(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, Surface target, long frameNumber) {
+			if( MyDebug.LOG )
+				Log.d(TAG, "onCaptureBufferLost: " + frameNumber);
+			super.onCaptureBufferLost(session, request, target, frameNumber);
+		}
+
+		public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, CaptureFailure failure) {
+			if( MyDebug.LOG )
+				Log.d(TAG, "onCaptureFailed: " + failure);
+			super.onCaptureFailed(session, request, failure); // API docs say this does nothing, but call it just to be safe
+		}
+
+		public void onCaptureSequenceAborted(@NonNull CameraCaptureSession session, int sequenceId) {
+			if( MyDebug.LOG ) {
+				Log.d(TAG, "onCaptureSequenceAborted");
+				Log.d(TAG, "sequenceId: " + sequenceId);
+			}
+			super.onCaptureSequenceAborted(session, sequenceId); // API docs say this does nothing, but call it just to be safe
+		}
+
+		public void onCaptureSequenceCompleted(@NonNull CameraCaptureSession session, int sequenceId, long frameNumber) {
+			if( MyDebug.LOG ) {
+				Log.d(TAG, "onCaptureSequenceCompleted");
+				Log.d(TAG, "sequenceId: " + sequenceId);
+				Log.d(TAG, "frameNumber: " + frameNumber);
+			}
+			super.onCaptureSequenceCompleted(session, sequenceId, frameNumber); // API docs say this does nothing, but call it just to be safe
+		}
+
 		public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
 			if( request.getTag() == RequestTag.CAPTURE ) {
 				if( MyDebug.LOG )
 					Log.d(TAG, "onCaptureStarted: capture");
 				// n.b., we don't play the shutter sound here, as it typically sounds "too late"
+				// (if ever we changed this, would also need to fix for burst, where we only set the RequestTag.CAPTURE for the last image)
 			}
+			super.onCaptureStarted(session, request, timestamp, frameNumber);
 		}
 
 		public void onCaptureProgressed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull CaptureResult partialResult) {
 			/*if( MyDebug.LOG )
 				Log.d(TAG, "onCaptureProgressed");*/
-			process(partialResult);
+			//process(request, partialResult);
+			// Note that we shouldn't try to process partial results - or if in future we decide to, remember that it's documented that
+			// not all results may be available. E.g., OnePlus 3T on Android 7 (OxygenOS 4.0.2) reports null for AF_STATE from this method.
+			// We'd also need to fix up the discarding of old frames in process(), as we probably don't want to be discarding the
+			// complete results from onCaptureCompleted()!
 			super.onCaptureProgressed(session, request, partialResult); // API docs say this does nothing, but call it just to be safe (as with Google Camera)
 		}
 
 		public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
 			/*if( MyDebug.LOG )
 				Log.d(TAG, "onCaptureCompleted");*/
-			process(result);
+			if( request.getTag() == RequestTag.CAPTURE ) {
+				if (MyDebug.LOG) {
+					Log.d(TAG, "onCaptureCompleted: capture");
+					Log.d(TAG, "sequenceId: " + result.getSequenceId());
+				}
+			}
+			process(request, result);
 			processCompleted(request, result);
 			super.onCaptureCompleted(session, request, result); // API docs say this does nothing, but call it just to be safe (as with Google Camera)
 		}
 
 		/** Processes either a partial or total result.
 		 */
-		private void process(CaptureResult result) {
+		private void process(CaptureRequest request, CaptureResult result) {
 			/*if( MyDebug.LOG )
 			Log.d(TAG, "process, state: " + state);*/
 			if( result.getFrameNumber() < last_process_frame_number ) {
@@ -3663,9 +3884,43 @@ public class CameraController2 extends CameraController {
 				return;
 			}
 			last_process_frame_number = result.getFrameNumber();
-			
+
+			/*Integer flash_mode = result.get(CaptureResult.FLASH_MODE);
+			if( MyDebug.LOG ) {
+				if( flash_mode == null )
+					Log.d(TAG, "FLASH_MODE is null");
+				else if( flash_mode == CaptureResult.FLASH_MODE_OFF )
+					Log.d(TAG, "FLASH_MODE = FLASH_MODE_OFF");
+				else if( flash_mode == CaptureResult.FLASH_MODE_SINGLE )
+					Log.d(TAG, "FLASH_MODE = FLASH_MODE_SINGLE");
+				else if( flash_mode == CaptureResult.FLASH_MODE_TORCH )
+					Log.d(TAG, "FLASH_MODE = FLASH_MODE_TORCH");
+				else
+					Log.d(TAG, "FLASH_MODE = " + flash_mode);
+			}*/
+
 			// use Integer instead of int, so can compare to null: Google Play crashes confirmed that this can happen; Google Camera also ignores cases with null af state
 			Integer af_state = result.get(CaptureResult.CONTROL_AF_STATE);
+			/*if( MyDebug.LOG ) {
+				if( af_state == null )
+					Log.d(TAG, "CONTROL_AF_STATE is null");
+				else if( af_state == CaptureResult.CONTROL_AF_STATE_INACTIVE )
+					Log.d(TAG, "CONTROL_AF_STATE = CONTROL_AF_STATE_INACTIVE");
+				else if( af_state == CaptureResult.CONTROL_AF_STATE_PASSIVE_SCAN )
+					Log.d(TAG, "CONTROL_AF_STATE = CONTROL_AF_STATE_PASSIVE_SCAN");
+				else if( af_state == CaptureResult.CONTROL_AF_STATE_PASSIVE_FOCUSED )
+					Log.d(TAG, "CONTROL_AF_STATE = CONTROL_AF_STATE_PASSIVE_FOCUSED");
+				else if( af_state == CaptureResult.CONTROL_AF_STATE_ACTIVE_SCAN )
+					Log.d(TAG, "CONTROL_AF_STATE = CONTROL_AF_STATE_ACTIVE_SCAN");
+				else if( af_state == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED )
+					Log.d(TAG, "CONTROL_AF_STATE = CONTROL_AF_STATE_FOCUSED_LOCKED");
+				else if( af_state == CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED )
+					Log.d(TAG, "CONTROL_AF_STATE = CONTROL_AF_STATE_NOT_FOCUSED_LOCKED");
+				else if( af_state == CaptureResult.CONTROL_AF_STATE_PASSIVE_UNFOCUSED )
+					Log.d(TAG, "CONTROL_AF_STATE = CONTROL_AF_STATE_PASSIVE_UNFOCUSED");
+				else
+					Log.d(TAG, "CONTROL_AF_STATE = " + af_state);
+			}*/
 			if( af_state != null && af_state == CaptureResult.CONTROL_AF_STATE_PASSIVE_SCAN ) {
 				/*if( MyDebug.LOG )
 					Log.d(TAG, "not ready for capture: " + af_state);*/
@@ -3692,8 +3947,12 @@ public class CameraController2 extends CameraController {
 							else
 								Log.d(TAG, "af_state: " + af_state);
 						}
+						if( af_state == null ) {
+							test_af_state_null_focus++;
+						}
 						autofocus_cb.onAutoFocus(focus_success);
 						autofocus_cb = null;
+						capture_follows_autofocus_hint = false;
 					}
 				}
 			}
@@ -3737,6 +3996,39 @@ public class CameraController2 extends CameraController {
 				capture_result_is_ae_scanning = false;
 			}
 
+			if( ae_state != null && ae_state == CaptureResult.CONTROL_AE_STATE_FLASH_REQUIRED ) {
+				if( MyDebug.LOG && !capture_result_needs_flash )
+					Log.d(TAG, "ae_state now needs flash");
+				capture_result_needs_flash = true;
+			}
+			else {
+				if( MyDebug.LOG && capture_result_needs_flash )
+					Log.d(TAG, "ae_state no longer needs flash");
+				capture_result_needs_flash = false;
+			}
+
+			/*Integer awb_state = result.get(CaptureResult.CONTROL_AWB_STATE);
+			if( MyDebug.LOG ) {
+				if( awb_state == null )
+					Log.d(TAG, "CONTROL_AWB_STATE is null");
+				else if( awb_state == CaptureResult.CONTROL_AWB_STATE_INACTIVE )
+					Log.d(TAG, "CONTROL_AWB_STATE = CONTROL_AWB_STATE_INACTIVE");
+				else if( awb_state == CaptureResult.CONTROL_AWB_STATE_SEARCHING )
+					Log.d(TAG, "CONTROL_AWB_STATE = CONTROL_AWB_STATE_SEARCHING");
+				else if( awb_state == CaptureResult.CONTROL_AWB_STATE_CONVERGED )
+					Log.d(TAG, "CONTROL_AWB_STATE = CONTROL_AWB_STATE_CONVERGED");
+				else if( awb_state == CaptureResult.CONTROL_AWB_STATE_LOCKED )
+					Log.d(TAG, "CONTROL_AWB_STATE = CONTROL_AWB_STATE_LOCKED");
+				else
+					Log.d(TAG, "CONTROL_AWB_STATE = " + awb_state);
+			}*/
+
+			if( fake_precapture_turn_on_torch_id != null && fake_precapture_turn_on_torch_id == request ) {
+				if( MyDebug.LOG )
+					Log.d(TAG, "torch turned on for fake precapture");
+				fake_precapture_turn_on_torch_id = null;
+			}
+
 			if( state == STATE_NORMAL ) {
 				// do nothing
 			}
@@ -3745,12 +4037,14 @@ public class CameraController2 extends CameraController {
 					// autofocus shouldn't really be requested if af not available, but still allow this rather than getting stuck waiting for autofocus to complete
 					if( MyDebug.LOG )
 						Log.e(TAG, "waiting for autofocus but af_state is null");
+					test_af_state_null_focus++;
 					state = STATE_NORMAL;
 			    	precapture_state_change_time_ms = -1;
 					if( autofocus_cb != null ) {
 						autofocus_cb.onAutoFocus(false);
 						autofocus_cb = null;
 					}
+					capture_follows_autofocus_hint = false;
 				}
 				else if( af_state != last_af_state ) {
 					// check for autofocus completing
@@ -3769,26 +4063,57 @@ public class CameraController2 extends CameraController {
 						state = STATE_NORMAL;
 				    	precapture_state_change_time_ms = -1;
 						if( use_fake_precapture_mode && fake_precapture_torch_focus_performed ) {
-							if( MyDebug.LOG )
-								Log.d(TAG, "turn off torch after focus (fake precapture code)");
 							fake_precapture_torch_focus_performed = false;
-							camera_settings.setAEMode(previewBuilder, false);
-							try {
-								setRepeatingRequest();
-							}
-							catch(CameraAccessException e) {
-								if( MyDebug.LOG ) {
-									Log.e(TAG, "failed to set repeating request to turn off torch after autofocus");
-									Log.e(TAG, "reason: " + e.getReason());
-									Log.e(TAG, "message: " + e.getMessage());
+							if( !capture_follows_autofocus_hint ) {
+								// If we're going to be taking a photo immediately after the autofocus, it's better for the fake flash
+								// mode to leave the torch on. If we don't do this, one of the following issues can happen:
+								// - On OnePlus 3T, the torch doesn't get turned off, but because we've switched off the torch flag
+								//   in previewBuilder, we go ahead with the precapture routine instead of
+								if( MyDebug.LOG )
+									Log.d(TAG, "turn off torch after focus (fake precapture code)");
+
+								// same hack as in setFlashValue() - for fake precapture we need to turn off the torch mode that was set, but
+								// at least on Nexus 6, we need to turn to flash_off to turn off the torch!
+								String saved_flash_value = camera_settings.flash_value;
+								camera_settings.flash_value = "flash_off";
+								camera_settings.setAEMode(previewBuilder, false);
+								try {
+									capture();
 								}
-								e.printStackTrace();
-							} 
+								catch(CameraAccessException e) {
+									if( MyDebug.LOG ) {
+										Log.e(TAG, "failed to do capture to turn off torch after autofocus");
+										Log.e(TAG, "reason: " + e.getReason());
+										Log.e(TAG, "message: " + e.getMessage());
+									}
+									e.printStackTrace();
+								}
+
+								// now set the actual (should be flash auto or flash on) mode
+								camera_settings.flash_value = saved_flash_value;
+								camera_settings.setAEMode(previewBuilder, false);
+								try {
+									setRepeatingRequest();
+								}
+								catch(CameraAccessException e) {
+									if( MyDebug.LOG ) {
+										Log.e(TAG, "failed to set repeating request to turn off torch after autofocus");
+										Log.e(TAG, "reason: " + e.getReason());
+										Log.e(TAG, "message: " + e.getMessage());
+									}
+									e.printStackTrace();
+								}
+							}
+							else {
+								if( MyDebug.LOG )
+									Log.d(TAG, "torch was enabled for autofocus, leave it on for capture (fake precapture code)");
+							}
 						}
 						if( autofocus_cb != null ) {
 							autofocus_cb.onAutoFocus(focus_success);
 							autofocus_cb = null;
 						}
+						capture_follows_autofocus_hint = false;
 					}
 				}
 			}
@@ -3812,9 +4137,8 @@ public class CameraController2 extends CameraController {
 				}
 				else if( precapture_state_change_time_ms != -1 && System.currentTimeMillis() - precapture_state_change_time_ms > precapture_start_timeout_c ) {
 					// hack - give up waiting - sometimes we never get a CONTROL_AE_STATE_PRECAPTURE so would end up stuck
-					if( MyDebug.LOG ) {
-						Log.e(TAG, "precapture start timeout");
-					}
+					// always log error, so we can look for it when manually testing with logging disabled
+					Log.e(TAG, "precapture start timeout");
 					count_precapture_timeout++;
 					state = STATE_WAITING_PRECAPTURE_DONE;
 					precapture_state_change_time_ms = System.currentTimeMillis();
@@ -3839,9 +4163,8 @@ public class CameraController2 extends CameraController {
 				}
 				else if( precapture_state_change_time_ms != -1 && System.currentTimeMillis() - precapture_state_change_time_ms > precapture_done_timeout_c ) {
 					// just in case
-					if( MyDebug.LOG ) {
-						Log.e(TAG, "precapture done timeout");
-					}
+					// always log error, so we can look for it when manually testing with logging disabled
+					Log.e(TAG, "precapture done timeout");
 					count_precapture_timeout++;
 					state = STATE_NORMAL;
 					precapture_state_change_time_ms = -1;
@@ -3857,7 +4180,12 @@ public class CameraController2 extends CameraController {
 					else
 						Log.d(TAG, "CONTROL_AE_STATE is null");
 				}
-				if( ae_state == null || ae_state == CaptureResult.CONTROL_AE_STATE_SEARCHING ) {
+				if( fake_precapture_turn_on_torch_id != null ) {
+					if( MyDebug.LOG )
+						Log.d(TAG, "still waiting for torch to come on for fake precapture");
+				}
+
+				if( fake_precapture_turn_on_torch_id == null && (ae_state == null || ae_state == CaptureResult.CONTROL_AE_STATE_SEARCHING) ) {
 					if( MyDebug.LOG ) {
 						Log.d(TAG, "fake precapture started after: " + (System.currentTimeMillis() - precapture_state_change_time_ms));
 					}
@@ -3866,12 +4194,12 @@ public class CameraController2 extends CameraController {
 				}
 				else if( precapture_state_change_time_ms != -1 && System.currentTimeMillis() - precapture_state_change_time_ms > precapture_start_timeout_c ) {
 					// just in case
-					if( MyDebug.LOG ) {
-						Log.e(TAG, "fake precapture start timeout");
-					}
+					// always log error, so we can look for it when manually testing with logging disabled
+					Log.e(TAG, "fake precapture start timeout");
 					count_precapture_timeout++;
 					state = STATE_WAITING_FAKE_PRECAPTURE_DONE;
 					precapture_state_change_time_ms = System.currentTimeMillis();
+					fake_precapture_turn_on_torch_id = null;
 				}
 			}
 			else if( state == STATE_WAITING_FAKE_PRECAPTURE_DONE ) {
@@ -3895,9 +4223,8 @@ public class CameraController2 extends CameraController {
 				}
 				else if( precapture_state_change_time_ms != -1 && System.currentTimeMillis() - precapture_state_change_time_ms > precapture_done_timeout_c ) {
 					// sometimes camera can take a while to stop ae/af scanning, better to just go ahead and take photo
-					if( MyDebug.LOG ) {
-						Log.e(TAG, "fake precapture done timeout");
-					}
+					// always log error, so we can look for it when manually testing with logging disabled
+					Log.e(TAG, "fake precapture done timeout");
 					count_precapture_timeout++;
 					state = STATE_NORMAL;
 					precapture_state_change_time_ms = -1;
@@ -3938,10 +4265,11 @@ public class CameraController2 extends CameraController {
 				capture_result_iso = result.get(CaptureResult.SENSOR_SENSITIVITY);
 				/*if( MyDebug.LOG )
 					Log.d(TAG, "capture_result_iso: " + capture_result_iso);*/
-				if( camera_settings.has_iso && camera_settings.iso != capture_result_iso ) {
-					// ugly hack: problem that when we start recording video (video_recorder.start() call), this often causes the ISO setting to reset to the wrong value!
+				if( camera_settings.has_iso && Math.abs(camera_settings.iso - capture_result_iso) > 10  ) {
+					// ugly hack: problem (on Nexus 6 at least) that when we start recording video (video_recorder.start() call), this often causes the ISO setting to reset to the wrong value!
 					// seems to happen more often with shorter exposure time
 					// seems to happen on other camera apps with Camera2 API too
+					// update: allow some tolerance, as on OnePlus 3T it's normal to have some slight difference between requested and actual
 					// this workaround still means a brief flash with incorrect ISO, but is best we can do for now!
 					if( MyDebug.LOG ) {
 						Log.d(TAG, "ISO " + capture_result_iso + " different to requested ISO " + camera_settings.iso);
@@ -4009,7 +4337,7 @@ public class CameraController2 extends CameraController {
 					face_detection_listener.onFaceDetection(faces);
 				}
 			}
-			
+
 			if( push_repeating_request_when_torch_off && push_repeating_request_when_torch_off_id == request ) {
 				if( MyDebug.LOG )
 					Log.d(TAG, "received push_repeating_request_when_torch_off");
@@ -4060,6 +4388,7 @@ public class CameraController2 extends CameraController {
 			if( request.getTag() == RequestTag.CAPTURE ) {
 				if( MyDebug.LOG )
 					Log.d(TAG, "capture request completed");
+				test_capture_results++;
 				if( onRawImageAvailableListener != null ) {
 					if( test_wait_capture_result ) {
 						// for RAW capture, we require the capture result before creating DngCreator
@@ -4081,7 +4410,7 @@ public class CameraController2 extends CameraController {
 				// Camera2Basic does a capture then sets a repeating request - do the same here just to be safe
 				previewBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_CANCEL);
 				if( MyDebug.LOG )
-					Log.e(TAG, "### reset ae mode");
+					Log.d(TAG, "### reset ae mode");
 				String saved_flash_value = camera_settings.flash_value;
 				if( use_fake_precapture_mode && fake_precapture_torch_performed ) {
 					// same hack as in setFlashValue() - for fake precapture we need to turn off the torch mode that was set, but

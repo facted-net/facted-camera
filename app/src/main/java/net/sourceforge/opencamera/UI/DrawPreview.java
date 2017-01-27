@@ -71,8 +71,10 @@ public class DrawPreview {
 
 	private long ae_started_scanning_ms = -1; // time when ae started scanning
 
-    private boolean taking_picture;
-    private boolean front_screen_flash;
+    private boolean taking_picture; // true iff camera is in process of capturing a picture (including any necessary prior steps such as autofocus, flash/precapture)
+	private boolean capture_started; // true iff the camera is capturing
+	private long capture_started_time_ms; // time whe capture_started was set to true
+    private boolean front_screen_flash; // true iff the front screen display should maximise to simulate flash
     
 	private boolean continuous_focus_moving;
 	private long continuous_focus_moving_ms;
@@ -153,11 +155,22 @@ public class DrawPreview {
     	else {
     		taking_picture = false;
     		front_screen_flash = false;
+			capture_started = false;
+			capture_started_time_ms = 0;
     	}
     }
 	
 	public void turnFrontScreenFlashOn() {
+		if( MyDebug.LOG )
+			Log.d(TAG, "turnFrontScreenFlashOn");
 		front_screen_flash = true;
+	}
+
+	public void onCaptureStarted() {
+		if( MyDebug.LOG )
+			Log.d(TAG, "onCaptureStarted");
+		capture_started = true;
+		capture_started_time_ms = System.currentTimeMillis();
 	}
 
 	public void onContinuousFocusMove(boolean start) {
@@ -199,40 +212,13 @@ public class DrawPreview {
     	return hours + ":" + String.format(Locale.getDefault(), "%02d", mins) + ":" + String.format(Locale.getDefault(), "%02d", secs);
     }
 
-	public void onDrawPreview(Canvas canvas) {
+	private void drawGrids(Canvas canvas) {
 		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this.getContext());
 		Preview preview  = main_activity.getPreview();
 		CameraController camera_controller = preview.getCameraController();
-		int ui_rotation = preview.getUIRotation();
-		boolean has_level_angle = preview.hasLevelAngle();
-		double level_angle = preview.getLevelAngle();
-		boolean has_pitch_angle = preview.hasPitchAngle();
-		double pitch_angle = preview.getPitchAngle();
-		boolean has_geo_direction = preview.hasGeoDirection();
-		double geo_direction = preview.getGeoDirection();
-		boolean ui_placement_right = main_activity.getMainUI().getUIPlacementRight();
-		if( main_activity.getMainUI().inImmersiveMode() ) {
-			String immersive_mode = sharedPreferences.getString(PreferenceKeys.getImmersiveModePreferenceKey(), "immersive_mode_low_profile");
-			if( immersive_mode.equals("immersive_mode_everything") ) {
-				// exit, to ensure we don't display anything!
-				return;
-			}
-		}
-		final float scale = getContext().getResources().getDisplayMetrics().density;
 		String preference_grid = sharedPreferences.getString(PreferenceKeys.getShowGridPreferenceKey(), "preference_grid_none");
-		if( camera_controller!= null && front_screen_flash ) {
-			p.setColor(Color.WHITE);
-			canvas.drawRect(0.0f, 0.0f, canvas.getWidth(), canvas.getHeight(), p);
-		}
-		else if( camera_controller != null && taking_picture && getTakePhotoBorderPref() ) {
-			p.setColor(Color.WHITE);
-			p.setStyle(Paint.Style.STROKE);
-			float this_stroke_width = (5.0f * scale + 0.5f); // convert dps to pixels
-			p.setStrokeWidth(this_stroke_width);
-			canvas.drawRect(0.0f, 0.0f, canvas.getWidth(), canvas.getHeight(), p);
-			p.setStyle(Paint.Style.FILL); // reset
-			p.setStrokeWidth(stroke_width); // reset
-		}
+		final float scale = getContext().getResources().getDisplayMetrics().density;
+
 		if( camera_controller != null && preference_grid.equals("preference_grid_3x3") ) {
 			p.setColor(Color.WHITE);
 			canvas.drawLine(canvas.getWidth()/3.0f, 0.0f, canvas.getWidth()/3.0f, canvas.getHeight()-1.0f, p);
@@ -286,7 +272,7 @@ public class DrawPreview {
 			int full_height = canvas.getHeight();
 			int width = (int)(full_width*((double)fibb_n)/(double)(fibb));
 			int height = full_height;
-			
+
 			for(int count=0;count<2;count++) {
 				canvas.save();
 				draw_rect.set(left, top, left+width, top+height);
@@ -295,11 +281,11 @@ public class DrawPreview {
 				draw_rect.set(left, top, left+2*width, top+2*height);
 				canvas.drawOval(draw_rect, p);
 				canvas.restore();
-				
+
 				int old_fibb = fibb;
 				fibb = fibb_n;
 				fibb_n = old_fibb - fibb;
-	
+
 				left += width;
 				full_width = full_width - width;
 				width = full_width;
@@ -312,11 +298,11 @@ public class DrawPreview {
 				draw_rect.set(left-width, top, left+width, top+2*height);
 				canvas.drawOval(draw_rect, p);
 				canvas.restore();
-	
+
 				old_fibb = fibb;
 				fibb = fibb_n;
 				fibb_n = old_fibb - fibb;
-	
+
 				top += height;
 				full_height = full_height - height;
 				height = full_height;
@@ -330,11 +316,11 @@ public class DrawPreview {
 				draw_rect.set(left-width, top-height, left+width, top+height);
 				canvas.drawOval(draw_rect, p);
 				canvas.restore();
-	
+
 				old_fibb = fibb;
 				fibb = fibb_n;
 				fibb_n = old_fibb - fibb;
-	
+
 				full_width = full_width - width;
 				width = full_width;
 				left -= width;
@@ -358,7 +344,7 @@ public class DrawPreview {
 				top -= height;
 				width = (int)(width*((double)fibb_n)/(double)(fibb));
 			}
-			
+
 			canvas.restore();
 			p.setStyle(Paint.Style.FILL); // reset
 		}
@@ -389,6 +375,44 @@ public class DrawPreview {
 				canvas.drawLine(diff+canvas.getHeight()-1.0f, 0.0f, diff, canvas.getHeight()-1.0f, p);
 			}
 		}
+	}
+
+	public void onDrawPreview(Canvas canvas) {
+		/*if( MyDebug.LOG )
+			Log.d(TAG, "onDrawPreview");*/
+		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this.getContext());
+		Preview preview  = main_activity.getPreview();
+		CameraController camera_controller = preview.getCameraController();
+		int ui_rotation = preview.getUIRotation();
+		boolean has_level_angle = preview.hasLevelAngle();
+		double level_angle = preview.getLevelAngle();
+		boolean has_pitch_angle = preview.hasPitchAngle();
+		double pitch_angle = preview.getPitchAngle();
+		boolean has_geo_direction = preview.hasGeoDirection();
+		double geo_direction = preview.getGeoDirection();
+		boolean ui_placement_right = main_activity.getMainUI().getUIPlacementRight();
+		if( main_activity.getMainUI().inImmersiveMode() ) {
+			String immersive_mode = sharedPreferences.getString(PreferenceKeys.getImmersiveModePreferenceKey(), "immersive_mode_low_profile");
+			if( immersive_mode.equals("immersive_mode_everything") ) {
+				// exit, to ensure we don't display anything!
+				return;
+			}
+		}
+		final float scale = getContext().getResources().getDisplayMetrics().density;
+		if( camera_controller!= null && front_screen_flash ) {
+			p.setColor(Color.WHITE);
+			canvas.drawRect(0.0f, 0.0f, canvas.getWidth(), canvas.getHeight(), p);
+		}
+		else if( camera_controller != null && taking_picture && getTakePhotoBorderPref() ) {
+			p.setColor(Color.WHITE);
+			p.setStyle(Paint.Style.STROKE);
+			float this_stroke_width = (5.0f * scale + 0.5f); // convert dps to pixels
+			p.setStrokeWidth(this_stroke_width);
+			canvas.drawRect(0.0f, 0.0f, canvas.getWidth(), canvas.getHeight(), p);
+			p.setStyle(Paint.Style.FILL); // reset
+			p.setStrokeWidth(stroke_width); // reset
+		}
+		drawGrids(canvas);
 
 		if( preview.isVideo() || sharedPreferences.getString(PreferenceKeys.getPreviewSizePreferenceKey(), "preference_preview_size_wysiwyg").equals("preference_preview_size_wysiwyg") ) {
 			String preference_crop_guide = sharedPreferences.getString(PreferenceKeys.getShowCropGuidePreferenceKey(), "crop_guide_none");
@@ -599,7 +623,7 @@ public class DrawPreview {
 				String number_string = decimalFormat.format(level_angle);
 				number_string = number_string.replaceAll( "^-(?=0(.0*)?$)", ""); // avoids displaying "-0.0", see http://stackoverflow.com/questions/11929096/negative-sign-in-case-of-zero-in-java
 				String string = getContext().getResources().getString(R.string.angle) + ": " + number_string + (char)0x00B0;
-				applicationInterface.drawTextWithBackground(canvas, p, string, color, Color.BLACK, canvas.getWidth() / 2 + pixels_offset_x, text_base_y, false, ybounds_text, true);
+				applicationInterface.drawTextWithBackground(canvas, p, string, color, Color.BLACK, canvas.getWidth() / 2 + pixels_offset_x, text_base_y, MyApplicationInterface.Alignment.ALIGNMENT_BOTTOM, ybounds_text, true);
 				p.setUnderlineText(false);
 			}
 			if( draw_geo_direction ) {
@@ -616,7 +640,7 @@ public class DrawPreview {
 					geo_angle += 360.0f;
 				}
 				String string = " " + getContext().getResources().getString(R.string.direction) + ": " + Math.round(geo_angle) + (char)0x00B0;
-				applicationInterface.drawTextWithBackground(canvas, p, string, color, Color.BLACK, canvas.getWidth() / 2, text_base_y, false, ybounds_text, true);
+				applicationInterface.drawTextWithBackground(canvas, p, string, color, Color.BLACK, canvas.getWidth() / 2, text_base_y, MyApplicationInterface.Alignment.ALIGNMENT_BOTTOM, ybounds_text, true);
 			}
 			if( preview.isOnTimer() ) {
 				long remaining_time = (preview.getTimerEndTime() - System.currentTimeMillis() + 999)/1000;
@@ -652,7 +676,25 @@ public class DrawPreview {
             		applicationInterface.drawTextWithBackground(canvas, p, getContext().getResources().getString(R.string.screen_lock_message_1), color, Color.BLACK, canvas.getWidth() / 2, text_base_y - pixels_offset_y);
             		pixels_offset_y += text_y;
             	}
-            	applicationInterface.drawTextWithBackground(canvas, p, time_s, color, Color.BLACK, canvas.getWidth() / 2, text_base_y - pixels_offset_y);
+				if( !preview.isVideoRecordingPaused() || ((int)(System.currentTimeMillis() / 500)) % 2 == 0 ) { // if video is paused, then flash the video time
+					applicationInterface.drawTextWithBackground(canvas, p, time_s, color, Color.BLACK, canvas.getWidth() / 2, text_base_y - pixels_offset_y);
+				}
+			}
+			else if( taking_picture && capture_started ) {
+				if( camera_controller.isManualISO() ) {
+					// only show "capturing" text with time for manual exposure time >= 0.5s
+					long exposure_time = camera_controller.getExposureTime();
+					if( exposure_time >= 500000000L ) {
+						long time_ms = System.currentTimeMillis() - capture_started_time_ms;
+						if( ((int)(System.currentTimeMillis() / 500)) % 2 == 0 ) {
+							p.setTextSize(14 * scale + 0.5f); // convert dps to pixels
+							p.setTextAlign(Paint.Align.CENTER);
+							int pixels_offset_y = 3*text_y; // avoid overwriting the zoom, and also allow a bit extra space
+							int color = Color.rgb(244, 67, 54); // Red 500
+							applicationInterface.drawTextWithBackground(canvas, p, getContext().getResources().getString(R.string.capturing), color, Color.BLACK, canvas.getWidth() / 2, text_base_y - pixels_offset_y);
+						}
+					}
+				}
 			}
 		}
 		else if( camera_controller == null ) {
@@ -739,13 +781,13 @@ public class DrawPreview {
 				else {
 					ae_started_scanning_ms = -1;
 				}
-				applicationInterface.drawTextWithBackground(canvas, p, string, text_color, Color.BLACK, location_x, location_y, true, ybounds_text, true);
+				applicationInterface.drawTextWithBackground(canvas, p, string, text_color, Color.BLACK, location_x, location_y, MyApplicationInterface.Alignment.ALIGNMENT_TOP, ybounds_text, true);
 			}
 			/*if( camera_controller.captureResultHasFocusDistance() ) {
 				float dist_min = camera_controller.captureResultFocusDistanceMin();
 				float dist_max = camera_controller.captureResultFocusDistanceMin();
 				string = preview.getFocusDistanceString(dist_min, dist_max);
-				applicationInterface.drawTextWithBackground(canvas, p, string, Color.rgb(255, 235, 59), Color.BLACK, location_x, location_y2, true, ybounds_text, true); // Yellow 500
+				applicationInterface.drawTextWithBackground(canvas, p, string, Color.rgb(255, 235, 59), Color.BLACK, location_x, location_y2, MyApplicationInterface.Alignment.ALIGNMENT_TOP, ybounds_text, true); // Yellow 500
 			}*/
 		}
 		if( preview.supportsZoom() && camera_controller != null && sharedPreferences.getBoolean(PreferenceKeys.getShowZoomPreferenceKey(), true) ) {
@@ -755,7 +797,7 @@ public class DrawPreview {
 				// Convert the dps to pixels, based on density scale
 				p.setTextSize(14 * scale + 0.5f); // convert dps to pixels
 				p.setTextAlign(Paint.Align.CENTER);
-				applicationInterface.drawTextWithBackground(canvas, p, getContext().getResources().getString(R.string.zoom) + ": " + zoom_ratio +"x", Color.WHITE, Color.BLACK, canvas.getWidth() / 2, text_base_y - text_y, false, ybounds_text, true);
+				applicationInterface.drawTextWithBackground(canvas, p, getContext().getResources().getString(R.string.zoom) + ": " + zoom_ratio +"x", Color.WHITE, Color.BLACK, canvas.getWidth() / 2, text_base_y - text_y, MyApplicationInterface.Alignment.ALIGNMENT_BOTTOM, ybounds_text, true);
 			}
 		}
 
@@ -859,7 +901,7 @@ public class DrawPreview {
 	        // also possibly related https://code.google.com/p/android/issues/detail?id=181201
 	        String current_time = DateFormat.getTimeInstance().format(c.getTime());
 	        //String current_time = DateUtils.formatDateTime(getContext(), c.getTimeInMillis(), DateUtils.FORMAT_SHOW_TIME);
-	        applicationInterface.drawTextWithBackground(canvas, p, current_time, Color.WHITE, Color.BLACK, location_x, location_y, true);
+	        applicationInterface.drawTextWithBackground(canvas, p, current_time, Color.WHITE, Color.BLACK, location_x, location_y, MyApplicationInterface.Alignment.ALIGNMENT_TOP);
 	    }
 
 		if( camera_controller != null && sharedPreferences.getBoolean(PreferenceKeys.getShowFreeMemoryPreferenceKey(), true) ) {
@@ -888,15 +930,16 @@ public class DrawPreview {
 				last_free_memory_time = time_now; // always set this, so that in case of free memory not being available, we aren't calling freeMemory() every frame
 			}
 			if( free_memory_gb >= 0.0f ) {
-				applicationInterface.drawTextWithBackground(canvas, p, getContext().getResources().getString(R.string.free_memory) + ": " + decimalFormat.format(free_memory_gb) + getContext().getResources().getString(R.string.gb_abbreviation), Color.WHITE, Color.BLACK, location_x, location_y, true);
+				applicationInterface.drawTextWithBackground(canvas, p, getContext().getResources().getString(R.string.free_memory) + ": " + decimalFormat.format(free_memory_gb) + getContext().getResources().getString(R.string.gb_abbreviation), Color.WHITE, Color.BLACK, location_x, location_y, MyApplicationInterface.Alignment.ALIGNMENT_TOP);
 			}
 		}
 
 		canvas.restore();
 
 		boolean show_angle_line = sharedPreferences.getBoolean(PreferenceKeys.getShowAngleLinePreferenceKey(), false);
-		boolean show_pitch_lines = sharedPreferences.getBoolean(PreferenceKeys.getShowAltitudeLinesPreferenceKey(), false);
-		if( camera_controller != null && !preview.isPreviewPaused() && has_level_angle && ( show_angle_line || show_pitch_lines ) ) {
+		boolean show_pitch_lines = sharedPreferences.getBoolean(PreferenceKeys.getShowPitchLinesPreferenceKey(), false);
+		boolean show_geo_direction_lines = sharedPreferences.getBoolean(PreferenceKeys.getShowGeoDirectionLinesPreferenceKey(), false);
+		if( camera_controller != null && !preview.isPreviewPaused() && has_level_angle && ( show_angle_line || show_pitch_lines || show_geo_direction_lines ) ) {
 			// n.b., must draw this without the standard canvas rotation
 			int radius_dps = (ui_rotation == 90 || ui_rotation == 270) ? 60 : 80;
 			int radius = (int) (radius_dps * scale + 0.5f); // convert dps to pixels
@@ -925,7 +968,6 @@ public class DrawPreview {
 				is_level = true;
 			}
 
-			int base_radius = radius;
 			if( is_level ) {
 				radius = (int)(radius * 1.2);
 			}
@@ -974,14 +1016,34 @@ public class DrawPreview {
 					canvas.drawRoundRect(draw_rect, hthickness, hthickness, p);
 				}
 			}
+			float camera_angle_x = preview.getViewAngleX();
+			float camera_angle_y = preview.getViewAngleY();
+			float angle_scale_x = (float)( canvas.getWidth() / (2.0 * Math.tan( Math.toRadians((camera_angle_x/2.0)) )) );
+			float angle_scale_y = (float)( canvas.getHeight() / (2.0 * Math.tan( Math.toRadians((camera_angle_y/2.0)) )) );
+			/*if( MyDebug.LOG ) {
+				Log.d(TAG, "camera_angle_x: " + camera_angle_x);
+				Log.d(TAG, "camera_angle_y: " + camera_angle_y);
+				Log.d(TAG, "angle_scale_x: " + angle_scale_x);
+				Log.d(TAG, "angle_scale_y: " + angle_scale_y);
+				Log.d(TAG, "angle_scale_x/scale: " + angle_scale_x/scale);
+				Log.d(TAG, "angle_scale_y/scale: " + angle_scale_y/scale);
+			}*/
+			/*if( MyDebug.LOG ) {
+				Log.d(TAG, "has_pitch_angle?: " + has_pitch_angle);
+				Log.d(TAG, "show_pitch_lines?: " + show_pitch_lines);
+			}*/
+			float angle_scale = (float)Math.sqrt( angle_scale_x*angle_scale_x + angle_scale_y*angle_scale_y );
+			angle_scale *= preview.getZoomRatio();
 			if( has_pitch_angle && show_pitch_lines ) {
-				int pitch_radius_dps = (ui_rotation == 90 || ui_rotation == 270) ? 80 : 100;
+				int pitch_radius_dps = (ui_rotation == 90 || ui_rotation == 270) ? 100 : 80;
 				int pitch_radius = (int) (pitch_radius_dps * scale + 0.5f); // convert dps to pixels
-				for(int altitude_angle=-90;altitude_angle<=90;altitude_angle+=10) {
-					double this_angle = pitch_angle - altitude_angle;
+				int angle_step = 10;
+				if( preview.getZoomRatio() >= 2.0f )
+					angle_step = 5;
+				for(int latitude_angle=-90;latitude_angle<=90;latitude_angle+=angle_step) {
+					double this_angle = pitch_angle - latitude_angle;
 					if( Math.abs(this_angle) < 90.0 ) {
-						float pitch_distance_dp = 300.0f * (float)Math.tan( Math.toRadians(this_angle) );
-						float pitch_distance = (pitch_distance_dp * scale + 0.5f); // convert dps to pixels
+						float pitch_distance = angle_scale * (float)Math.tan( Math.toRadians(this_angle) ); // angle_scale is already in pixels rather than dps
 						/*if( MyDebug.LOG ) {
 							Log.d(TAG, "pitch_angle: " + pitch_angle);
 							Log.d(TAG, "pitch_distance_dp: " + pitch_distance_dp);
@@ -993,17 +1055,62 @@ public class DrawPreview {
 						draw_rect.set(cx - pitch_radius - hthickness, cy + pitch_distance - 2*hthickness, cx + pitch_radius + hthickness, cy + pitch_distance + 2*hthickness);
 						canvas.drawRoundRect(draw_rect, 2*hthickness, 2*hthickness, p);
 						// draw inner portion
-						if( altitude_angle == 0 && Math.abs(pitch_angle) < 1.0 ) {
-							p.setColor(getAngleHighlightColor());
+						p.setColor(Color.WHITE);
+						p.setTextAlign(Paint.Align.LEFT);
+						if( latitude_angle == 0 && Math.abs(pitch_angle) < 1.0 ) {
+							p.setAlpha(255);
 						}
 						else {
-							p.setColor(Color.WHITE);
+							p.setAlpha(line_alpha);
 						}
-						p.setAlpha(line_alpha);
 						draw_rect.set(cx - pitch_radius, cy + pitch_distance - hthickness, cx + pitch_radius, cy + pitch_distance + hthickness);
 						canvas.drawRoundRect(draw_rect, hthickness, hthickness, p);
 						// draw pitch angle indicator
-						applicationInterface.drawTextWithBackground(canvas, p, "" + altitude_angle + "\u00B0", p.getColor(), Color.BLACK, (int)(cx + pitch_radius + 4*hthickness), (int)(cy + pitch_distance));
+						applicationInterface.drawTextWithBackground(canvas, p, "" + latitude_angle + "\u00B0", p.getColor(), Color.BLACK, (int)(cx + pitch_radius + 4*hthickness), (int)(cy + pitch_distance - 2*hthickness), MyApplicationInterface.Alignment.ALIGNMENT_CENTRE);
+					}
+				}
+			}
+			if( has_geo_direction && has_pitch_angle && show_geo_direction_lines ) {
+				int geo_radius_dps = (ui_rotation == 90 || ui_rotation == 270) ? 80 : 100;
+				int geo_radius = (int) (geo_radius_dps * scale + 0.5f); // convert dps to pixels
+				float geo_angle = (float)Math.toDegrees(geo_direction);
+				int angle_step = 10;
+				if( preview.getZoomRatio() >= 2.0f )
+					angle_step = 5;
+				for(int longitude_angle=0;longitude_angle<360;longitude_angle+=angle_step) {
+					double this_angle = longitude_angle - geo_angle;
+					/*if( MyDebug.LOG ) {
+						Log.d(TAG, "longitude_angle: " + longitude_angle);
+						Log.d(TAG, "geo_angle: " + geo_angle);
+						Log.d(TAG, "this_angle: " + this_angle);
+					}*/
+					// normalise to be in interval [0, 360)
+					while( this_angle >= 360.0 )
+						this_angle -= 360.0;
+					while( this_angle < -360.0 )
+						this_angle += 360.0;
+					// pick shortest angle
+					if( this_angle > 180.0 )
+						this_angle = - (360.0 - this_angle);
+					if( Math.abs(this_angle) < 90.0 ) {
+						/*if( MyDebug.LOG ) {
+							Log.d(TAG, "this_angle is now: " + this_angle);
+						}*/
+						float geo_distance = angle_scale * (float)Math.tan( Math.toRadians(this_angle) ); // angle_scale is already in pixels rather than dps
+						// draw outline
+						p.setColor(Color.BLACK);
+						p.setAlpha(64);
+						// can't use drawRoundRect(left, top, right, bottom, ...) as that requires API 21
+						draw_rect.set(cx + geo_distance - 2*hthickness, cy - geo_radius - hthickness, cx + geo_distance + 2*hthickness, cy + geo_radius + hthickness);
+						canvas.drawRoundRect(draw_rect, 2*hthickness, 2*hthickness, p);
+						// draw inner portion
+						p.setColor(Color.WHITE);
+						p.setTextAlign(Paint.Align.CENTER);
+						p.setAlpha(line_alpha);
+						draw_rect.set(cx + geo_distance - hthickness, cy - geo_radius, cx + geo_distance + hthickness, cy + geo_radius);
+						canvas.drawRoundRect(draw_rect, hthickness, hthickness, p);
+						// draw geo direction angle indicator
+						applicationInterface.drawTextWithBackground(canvas, p, "" + longitude_angle + "\u00B0", p.getColor(), Color.BLACK, (int)(cx + geo_distance), (int)(cy - geo_radius - 4*hthickness), MyApplicationInterface.Alignment.ALIGNMENT_BOTTOM);
 					}
 				}
 			}
@@ -1014,9 +1121,13 @@ public class DrawPreview {
 			canvas.restore();
 		}
 
-		if( camera_controller != null && continuous_focus_moving ) {
+		if( camera_controller != null && continuous_focus_moving & !taking_picture ) {
+			// we don't display the continuous focusing animation when taking a photo - and can also ive the impression of having
+			// frozen if we pause because the image saver queue is full
 			long dt = System.currentTimeMillis() - continuous_focus_moving_ms;
 			final long length = 1000;
+			/*if( MyDebug.LOG )
+				Log.d(TAG, "continuous focus moving, dt: " + dt);*/
 			if( dt <= length ) {
 				float frac = ((float)dt) / (float)length;
 				float pos_x = canvas.getWidth()/2.0f;

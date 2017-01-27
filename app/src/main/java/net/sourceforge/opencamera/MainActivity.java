@@ -8,12 +8,8 @@ import net.sourceforge.opencamera.UI.MainUI;
 
 import java.io.File;
 import java.io.IOException;
-import java.text.DateFormat;
-import java.text.DecimalFormat;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Locale;
@@ -29,7 +25,6 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.location.Location;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.CamcorderProfile;
@@ -93,6 +88,7 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 	private Sensor mSensorAccelerometer;
 	private Sensor mSensorMagnetic;
 	private MainUI mainUI;
+	private TextFormatter textFormatter;
 	private MyApplicationInterface applicationInterface;
 	private Preview preview;
 	private OrientationEventListener orientationEventListener;
@@ -128,11 +124,6 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 	private final ToastBoxer audio_control_toast = new ToastBoxer();
 	private boolean block_startup_toast = false; // used when returning from Settings/Popup - if we're displaying a toast anyway, don't want to display the info toast too
 
-	private final DecimalFormat decimalFormat = new DecimalFormat("#0.0");
-
-	private boolean keydown_volume_up;
-	private boolean keydown_volume_down;
-	
 	// for testing; must be volatile for test project reading the state
 	public boolean is_test; // whether called from OpenCamera.test testing
 	public volatile Bitmap gallery_bitmap;
@@ -195,6 +186,7 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 		applicationInterface = new MyApplicationInterface(this, savedInstanceState);
 		if( MyDebug.LOG )
 			Log.d(TAG, "onCreate: time after creating application interface: " + (System.currentTimeMillis() - debug_time));
+		textFormatter = new TextFormatter(this);
 
 		// determine whether we support Camera2 API
 		initCamera2Support();
@@ -257,6 +249,8 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 	    speechRecognizerButton.setVisibility(View.GONE); // disabled by default, until the speech recognizer is created
 		if( MyDebug.LOG )
 			Log.d(TAG, "onCreate: time after setting button visibility: " + (System.currentTimeMillis() - debug_time));
+		View pauseVideoButton = findViewById(R.id.pause_video);
+		pauseVideoButton.setVisibility(View.INVISIBLE);
 
 		// listen for orientation event change
 	    orientationEventListener = new OrientationEventListener(this) {
@@ -322,15 +316,19 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 
 		// show "about" dialog for first time use; also set some per-device defaults
 		boolean has_done_first_time = sharedPreferences.contains(PreferenceKeys.getFirstTimePreferenceKey());
+		if( MyDebug.LOG )
+			Log.d(TAG, "has_done_first_time: " + has_done_first_time);
 		if( !has_done_first_time ) {
 			setDeviceDefaults();
 		}
-        if( !has_done_first_time && !is_test ) {
-	        AlertDialog.Builder alertDialog = new AlertDialog.Builder(this);
-            alertDialog.setTitle(R.string.app_name);
-            alertDialog.setMessage(R.string.intro_text);
-            alertDialog.setPositiveButton(R.string.intro_ok, null);
-            alertDialog.show();
+        if( !has_done_first_time ) {
+			if( !is_test ) {
+				AlertDialog.Builder alertDialog = new AlertDialog.Builder(this);
+				alertDialog.setTitle(R.string.app_name);
+				alertDialog.setMessage(R.string.intro_text);
+				alertDialog.setPositiveButton(R.string.intro_ok, null);
+				alertDialog.show();
+			}
 
             setFirstTimeFlag();
         }
@@ -381,15 +379,23 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
 		boolean is_samsung = Build.MANUFACTURER.toLowerCase(Locale.US).contains("samsung");
 		boolean is_oneplus = Build.MANUFACTURER.toLowerCase(Locale.US).contains("oneplus");
+		//boolean is_nexus = Build.MODEL.toLowerCase(Locale.US).contains("nexus");
 		boolean is_nexus6 = Build.MODEL.toLowerCase(Locale.US).contains("nexus 6");
+		//boolean is_pixel_phone = Build.DEVICE != null && Build.DEVICE.equals("sailfish");
+		//boolean is_pixel_xl_phone = Build.DEVICE != null && Build.DEVICE.equals("marlin");
 		if( MyDebug.LOG ) {
 			Log.d(TAG, "is_samsung? " + is_samsung);
 			Log.d(TAG, "is_oneplus? " + is_oneplus);
+			//Log.d(TAG, "is_nexus? " + is_nexus);
 			Log.d(TAG, "is_nexus6? " + is_nexus6);
+			//Log.d(TAG, "is_pixel_phone? " + is_pixel_phone);
+			//Log.d(TAG, "is_pixel_xl_phone? " + is_pixel_xl_phone);
 		}
 		if( is_samsung || is_oneplus ) {
 			// workaround needed for Samsung S7 at least (tested on Samsung RTL)
 			// workaround needed for OnePlus 3 at least (see http://forum.xda-developers.com/oneplus-3/help/camera2-support-t3453103 )
+			if( MyDebug.LOG )
+				Log.d(TAG, "set fake flash for camera2");
 			SharedPreferences.Editor editor = sharedPreferences.edit();
 			editor.putBoolean(PreferenceKeys.getCamera2FakeFlashPreferenceKey(), true);
 			editor.apply();
@@ -397,6 +403,8 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 		if( is_nexus6 ) {
 			// Nexus 6 captureBurst() started having problems with Android 7 upgrade - images appeared in wrong order (and with wrong order of shutter speeds in exif info), as well as problems with the camera failing with serious errors
 			// we set this even for Nexus 6 devices not on Android 7, as at some point they'll likely be upgraded to Android 7
+			if( MyDebug.LOG )
+				Log.d(TAG, "disable fast burst for camera2");
 			SharedPreferences.Editor editor = sharedPreferences.edit();
 			editor.putBoolean(PreferenceKeys.getCamera2FastBurstPreferenceKey(), false);
 			editor.apply();
@@ -536,6 +544,8 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 	}
 	
 	private void setFirstTimeFlag() {
+		if( MyDebug.LOG )
+			Log.d(TAG, "setFirstTimeFlag");
 		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
 		SharedPreferences.Editor editor = sharedPreferences.edit();
 		editor.putBoolean(PreferenceKeys.getFirstTimePreferenceKey(), true);
@@ -660,159 +670,17 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 	public boolean onKeyDown(int keyCode, KeyEvent event) { 
 		if( MyDebug.LOG )
 			Log.d(TAG, "onKeyDown: " + keyCode);
-		switch( keyCode ) {
-        case KeyEvent.KEYCODE_VOLUME_UP:
-        case KeyEvent.KEYCODE_VOLUME_DOWN:
-        case KeyEvent.KEYCODE_MEDIA_PREVIOUS: // media codes are for "selfie sticks" buttons
-        case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
-        case KeyEvent.KEYCODE_MEDIA_STOP:
-	        {
-    			if( keyCode == KeyEvent.KEYCODE_VOLUME_UP )
-    				keydown_volume_up = true;
-    			else if( keyCode == KeyEvent.KEYCODE_VOLUME_DOWN )
-    				keydown_volume_down = true;
-
-	    		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
-	    		String volume_keys = sharedPreferences.getString(PreferenceKeys.getVolumeKeysPreferenceKey(), "volume_take_photo");
-
-	    		if((keyCode==KeyEvent.KEYCODE_MEDIA_PREVIOUS
-	        		||keyCode==KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
-	        		||keyCode==KeyEvent.KEYCODE_MEDIA_STOP)
-	        		&&!(volume_keys.equals("volume_take_photo"))) {
-	        		AudioManager audioManager = (AudioManager) this.getSystemService(Context.AUDIO_SERVICE);
-	        		if(audioManager==null) break;
-	        		if(!audioManager.isWiredHeadsetOn()) break; // isWiredHeadsetOn() is deprecated, but comment says "Use only to check is a headset is connected or not."
-	        	}
-	    		
-	    		if( volume_keys.equals("volume_take_photo") ) {
-	            	takePicture();
-	                return true;
-	    		}
-	    		else if( volume_keys.equals("volume_focus") ) {
-	    			if( keydown_volume_up && keydown_volume_down ) {
-	    				if( MyDebug.LOG )
-	    					Log.d(TAG, "take photo rather than focus, as both volume keys are down");
-		            	takePicture();
-	    			}
-	    			else if( preview.getCurrentFocusValue() != null && preview.getCurrentFocusValue().equals("focus_mode_manual2") ) {
-		    			if( keyCode == KeyEvent.KEYCODE_VOLUME_UP )
-		    				this.changeFocusDistance(-1);
-		    			else
-		    				this.changeFocusDistance(1);
-	    			}
-	    			else {
-	    				// important not to repeatedly request focus, even though preview.requestAutoFocus() will cancel, as causes problem if key is held down (e.g., flash gets stuck on)
-	    				// also check DownTime vs EventTime to prevent repeated focusing whilst the key is held down
-	    				if( event.getDownTime() == event.getEventTime() && !preview.isFocusWaiting() ) {
-		    				if( MyDebug.LOG )
-		    					Log.d(TAG, "request focus due to volume key");
-		    				preview.requestAutoFocus();
-	    				}
-	    			}
-					return true;
-	    		}
-	    		else if( volume_keys.equals("volume_zoom") ) {
-	    			if( keyCode == KeyEvent.KEYCODE_VOLUME_UP )
-	    				this.zoomIn();
-	    			else
-	    				this.zoomOut();
-	                return true;
-	    		}
-	    		else if( volume_keys.equals("volume_exposure") ) {
-	    			if( preview.getCameraController() != null ) {
-		    			String value = sharedPreferences.getString(PreferenceKeys.getISOPreferenceKey(), preview.getCameraController().getDefaultISO());
-		    			boolean manual_iso = !value.equals("auto");
-		    			if( keyCode == KeyEvent.KEYCODE_VOLUME_UP ) {
-		    				if( manual_iso ) {
-		    					if( preview.supportsISORange() )
-			    					this.changeISO(1);
-		    				}
-		    				else
-		    					this.changeExposure(1);
-		    			}
-		    			else {
-		    				if( manual_iso ) {
-		    					if( preview.supportsISORange() )
-			    					this.changeISO(-1);
-		    				}
-		    				else
-		    					this.changeExposure(-1);
-		    			}
-	    			}
-	                return true;
-	    		}
-	    		else if( volume_keys.equals("volume_auto_stabilise") ) {
-	    			if( this.supports_auto_stabilise ) {
-						boolean auto_stabilise = sharedPreferences.getBoolean(PreferenceKeys.getAutoStabilisePreferenceKey(), false);
-						auto_stabilise = !auto_stabilise;
-						SharedPreferences.Editor editor = sharedPreferences.edit();
-						editor.putBoolean(PreferenceKeys.getAutoStabilisePreferenceKey(), auto_stabilise);
-						editor.apply();
-						String message = getResources().getString(R.string.preference_auto_stabilise) + ": " + getResources().getString(auto_stabilise ? R.string.on : R.string.off);
-						preview.showToast(changed_auto_stabilise_toast, message);
-	    			}
-	    			else {
-	    				preview.showToast(changed_auto_stabilise_toast, R.string.auto_stabilise_not_supported);
-	    			}
-	    			return true;
-	    		}
-	    		else if( volume_keys.equals("volume_really_nothing") ) {
-	    			// do nothing, but still return true so we don't change volume either
-	    			return true;
-	    		}
-	    		// else do nothing here, but still allow changing of volume (i.e., the default behaviour)
-	    		break;
-	        }
-		case KeyEvent.KEYCODE_MENU:
-			{
-	        	// needed to support hardware menu button
-	        	// tested successfully on Samsung S3 (via RTL)
-	        	// see http://stackoverflow.com/questions/8264611/how-to-detect-when-user-presses-menu-key-on-their-android-device
-				openSettings();
-	            return true;
-			}
-		case KeyEvent.KEYCODE_CAMERA:
-			{
-				if( event.getRepeatCount() == 0 ) {
-	            	takePicture();
-		            return true;
-				}
-			}
-		case KeyEvent.KEYCODE_FOCUS:
-			{
-				// important not to repeatedly request focus, even though preview.requestAutoFocus() will cancel - causes problem with hardware camera key where a half-press means to focus
-				// also check DownTime vs EventTime to prevent repeated focusing whilst the key is held down - see https://sourceforge.net/p/opencamera/tickets/174/ ,
-				// or same issue above for volume key focus
-				if( event.getDownTime() == event.getEventTime() && !preview.isFocusWaiting() ) {
-    				if( MyDebug.LOG )
-    					Log.d(TAG, "request focus due to focus key");
-    				preview.requestAutoFocus();
-				}
-	            return true;
-			}
-		case KeyEvent.KEYCODE_ZOOM_IN:
-			{
-				this.zoomIn();
-	            return true;
-			}
-		case KeyEvent.KEYCODE_ZOOM_OUT:
-			{
-				this.zoomOut();
-	            return true;
-			}
-		}
-        return super.onKeyDown(keyCode, event); 
+		boolean handled = mainUI.onKeyDown(keyCode, event);
+		if( handled )
+			return true;
+        return super.onKeyDown(keyCode, event);
     }
 
 	public boolean onKeyUp(int keyCode, KeyEvent event) { 
 		if( MyDebug.LOG )
 			Log.d(TAG, "onKeyUp: " + keyCode);
-		if( keyCode == KeyEvent.KEYCODE_VOLUME_UP )
-			keydown_volume_up = false;
-		else if( keyCode == KeyEvent.KEYCODE_VOLUME_DOWN )
-			keydown_volume_down = false;
-
-        return super.onKeyUp(keyCode, event); 
+		mainUI.onKeyUp(keyCode, event);
+        return super.onKeyUp(keyCode, event);
 	}
 
 	public void zoomIn() {
@@ -827,11 +695,11 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 		mainUI.changeSeekbar(R.id.exposure_seekbar, change);
 	}
 
-	private void changeISO(int change) {
+	public void changeISO(int change) {
 		mainUI.changeSeekbar(R.id.iso_seekbar, change);
 	}
 
-	private void changeFocusDistance(int change) {
+	public void changeFocusDistance(int change) {
 		mainUI.changeSeekbar(R.id.focus_seekbar, change);
 	}
 	
@@ -949,7 +817,16 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 			Log.d(TAG, "clickedTakePhoto");
     	this.takePicture();
     }
-    
+
+	public void clickedPauseVideo(View view) {
+		if( MyDebug.LOG )
+			Log.d(TAG, "clickedPauseVideo");
+		if( preview.isVideoRecording() ) { // just in case
+			preview.pauseVideo();
+			mainUI.setPauseVideoContentDescription();
+		}
+	}
+
     public void clickedAudioControl(View view) {
 		if( MyDebug.LOG )
 			Log.d(TAG, "clickedAudioControl");
@@ -1112,7 +989,7 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 		mainUI.togglePopupSettings();
     }
     
-    private void openSettings() {
+    public void openSettings() {
 		if( MyDebug.LOG )
 			Log.d(TAG, "openSettings");
 		waitUntilImageQueueEmpty(); // in theory not needed as we could continue running in the background, but best to be safe
@@ -1335,19 +1212,30 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
         }
         super.onBackPressed();        
     }
-    
-    public boolean usingKitKatImmersiveMode() {
-    	// whether we are using a Kit Kat style immersive mode (either hiding GUI, or everything)
+
+	public boolean usingKitKatImmersiveMode() {
+		// whether we are using a Kit Kat style immersive mode (either hiding GUI, or everything)
 		if( Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT ) {
-    		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
-    		String immersive_mode = sharedPreferences.getString(PreferenceKeys.getImmersiveModePreferenceKey(), "immersive_mode_low_profile");
-    		if( immersive_mode.equals("immersive_mode_gui") || immersive_mode.equals("immersive_mode_everything") )
-    			return true;
+			SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+			String immersive_mode = sharedPreferences.getString(PreferenceKeys.getImmersiveModePreferenceKey(), "immersive_mode_low_profile");
+			if( immersive_mode.equals("immersive_mode_gui") || immersive_mode.equals("immersive_mode_everything") )
+				return true;
 		}
 		return false;
-    }
-    
-    private Handler immersive_timer_handler = null;
+	}
+	public boolean usingKitKatImmersiveModeEverything() {
+		// whether we are using a Kit Kat style immersive mode for everything
+		if( Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT ) {
+			SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+			String immersive_mode = sharedPreferences.getString(PreferenceKeys.getImmersiveModePreferenceKey(), "immersive_mode_low_profile");
+			if( immersive_mode.equals("immersive_mode_everything") )
+				return true;
+		}
+		return false;
+	}
+
+
+	private Handler immersive_timer_handler = null;
     private Runnable immersive_timer_runnable = null;
     
     private void setImmersiveTimer() {
@@ -1790,6 +1678,26 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
         }
     }
 
+	void updateSaveFolder(String new_save_location) {
+		if( MyDebug.LOG )
+			Log.d(TAG, "updateSaveFolder: " + new_save_location);
+		if( new_save_location != null ) {
+			SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+			String orig_save_location = this.applicationInterface.getStorageUtils().getSaveLocation();
+
+			if( !orig_save_location.equals(new_save_location) ) {
+				if( MyDebug.LOG )
+					Log.d(TAG, "changed save_folder to: " + this.applicationInterface.getStorageUtils().getSaveLocation());
+				SharedPreferences.Editor editor = sharedPreferences.edit();
+				editor.putString(PreferenceKeys.getSaveLocationPreferenceKey(), new_save_location);
+				editor.apply();
+
+				this.save_location_history.updateFolderHistory(this.getStorageUtils().getSaveLocation(), true);
+				this.preview.showToast(null, getResources().getString(R.string.changed_save_location) + "\n" + this.applicationInterface.getStorageUtils().getSaveLocation());
+			}
+		}
+	}
+
 	public static class MyFolderChooserDialog extends FolderChooserDialog {
 		@Override
 		public void onDismiss(DialogInterface dialog) {
@@ -1801,22 +1709,7 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 			main_activity.setWindowFlagsForCamera();
 			main_activity.showPreview(true);
 			String new_save_location = this.getChosenFolder();
-			if( new_save_location != null ) {
-				SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this.getActivity());
-				String orig_save_location = main_activity.applicationInterface.getStorageUtils().getSaveLocation();
-
-				if( !orig_save_location.equals(new_save_location) ) {
-					if( MyDebug.LOG )
-						Log.d(TAG, "changed save_folder to: " + main_activity.applicationInterface.getStorageUtils().getSaveLocation());
-					SharedPreferences.Editor editor = sharedPreferences.edit();
-					editor.putString(PreferenceKeys.getSaveLocationPreferenceKey(), new_save_location);
-					editor.apply();
-
-					main_activity.save_location_history.updateFolderHistory(main_activity.getStorageUtils().getSaveLocation(), true);
-					main_activity.preview.showToast(null, getResources().getString(R.string.changed_save_location) + "\n" + main_activity.applicationInterface.getStorageUtils().getSaveLocation());
-				}
-			}
-
+			main_activity.updateSaveFolder(new_save_location);
 			super.onDismiss(dialog);
 		}
 	}
@@ -2012,7 +1905,7 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 		applicationInterface.trashLastImage();
     }
 
-    private void takePicture() {
+    public void takePicture() {
 		if( MyDebug.LOG )
 			Log.d(TAG, "takePicture");
 		closePopup();
@@ -2199,6 +2092,16 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 			}
 			if( MyDebug.LOG )
 				Log.d(TAG, "cameraSetup: time after setting up zoom: " + (System.currentTimeMillis() - debug_time));
+
+			View takePhotoButton = findViewById(R.id.take_photo);
+			if( sharedPreferences.getBoolean(PreferenceKeys.getShowTakePhotoPreferenceKey(), true) ) {
+				if( !mainUI.inImmersiveMode() ) {
+					takePhotoButton.setVisibility(View.VISIBLE);
+				}
+			}
+			else {
+				takePhotoButton.setVisibility(View.INVISIBLE);
+			}
 		}
 		{
 			if( MyDebug.LOG )
@@ -2463,6 +2366,10 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
     public MyApplicationInterface getApplicationInterface() {
     	return this.applicationInterface;
     }
+
+	public TextFormatter getTextFormatter() {
+		return this.textFormatter;
+	}
     
     public LocationSupplier getLocationSupplier() {
     	return this.applicationInterface.getLocationSupplier();
@@ -2665,29 +2572,36 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 		if( MyDebug.LOG )
 			Log.d(TAG, "startAudioListener");
 		audio_listener = new AudioListener(this);
-		audio_listener.start();
-		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
-		String sensitivity_pref = sharedPreferences.getString(PreferenceKeys.getAudioNoiseControlSensitivityPreferenceKey(), "0");
-		if( sensitivity_pref.equals("3") ) {
-			audio_noise_sensitivity = 50;
-		}
-		else if( sensitivity_pref.equals("2") ) {
-			audio_noise_sensitivity = 75;
-		}
-		else if( sensitivity_pref.equals("1") ) {
-			audio_noise_sensitivity = 125;
-		}
-		else if( sensitivity_pref.equals("-1") ) {
-			audio_noise_sensitivity = 150;
-		}
-		else if( sensitivity_pref.equals("-2") ) {
-			audio_noise_sensitivity = 200;
+		if( audio_listener.status() ) {
+			audio_listener.start();
+			SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+			String sensitivity_pref = sharedPreferences.getString(PreferenceKeys.getAudioNoiseControlSensitivityPreferenceKey(), "0");
+			if( sensitivity_pref.equals("3") ) {
+				audio_noise_sensitivity = 50;
+			}
+			else if( sensitivity_pref.equals("2") ) {
+				audio_noise_sensitivity = 75;
+			}
+			else if( sensitivity_pref.equals("1") ) {
+				audio_noise_sensitivity = 125;
+			}
+			else if( sensitivity_pref.equals("-1") ) {
+				audio_noise_sensitivity = 150;
+			}
+			else if( sensitivity_pref.equals("-2") ) {
+				audio_noise_sensitivity = 200;
+			}
+			else {
+				// default
+				audio_noise_sensitivity = 100;
+			}
+			mainUI.audioControlStarted();
 		}
 		else {
-			// default
-			audio_noise_sensitivity = 100;
+			audio_listener.release(true); // shouldn't be needed, but just to be safe
+			audio_listener = null;
+			preview.showToast(null, R.string.audio_listener_failed);
 		}
-        mainUI.audioControlStarted();
 	}
 	
 	private void initSpeechRecognizer() {
@@ -3188,71 +3102,6 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 	    			Log.e(TAG, "unknown requestCode " + requestCode);
 	        }
 	    }
-	}
-
-	/** Formats the date according to the user preference preference_stamp_dateformat.
-	 *  Returns "" if preference_stamp_dateformat is "preference_stamp_dateformat_none".
-	 */
-	public static String getDateString(String preference_stamp_dateformat, Date date) {
-		String date_stamp = "";
-		if( !preference_stamp_dateformat.equals("preference_stamp_dateformat_none") ) {
-			if( preference_stamp_dateformat.equals("preference_stamp_dateformat_yyyymmdd") )
-				date_stamp = new SimpleDateFormat("yyyy/MM/dd", Locale.getDefault()).format(date);
-			else if( preference_stamp_dateformat.equals("preference_stamp_dateformat_ddmmyyyy") )
-				date_stamp = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(date);
-			else if( preference_stamp_dateformat.equals("preference_stamp_dateformat_mmddyyyy") )
-				date_stamp = new SimpleDateFormat("MM/dd/yyyy", Locale.getDefault()).format(date);
-			else // default
-				date_stamp = DateFormat.getDateInstance().format(date);
-		}
-		return date_stamp;
-	}
-
-	/** Formats the time according to the user preference preference_stamp_timeformat.
-	 *  Returns "" if preference_stamp_timeformat is "preference_stamp_timeformat_none".
-	 */
-	public static String getTimeString(String preference_stamp_timeformat, Date date) {
-		String time_stamp = "";
-		if( !preference_stamp_timeformat.equals("preference_stamp_timeformat_none") ) {
-			if( preference_stamp_timeformat.equals("preference_stamp_timeformat_12hour") )
-				time_stamp = new SimpleDateFormat("hh:mm:ss a", Locale.getDefault()).format(date);
-			else if( preference_stamp_timeformat.equals("preference_stamp_timeformat_24hour") )
-				time_stamp = new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(date);
-			else // default
-				time_stamp = DateFormat.getTimeInstance().format(date);
-		}
-		return time_stamp;
-	}
-
-	/** Formats the GPS information according to the user preference_stamp_gpsformat preference_stamp_timeformat.
-	 *  Returns "" if preference_stamp_gpsformat is "preference_stamp_gpsformat_none", or both store_location and
-	 *  store_geo_direction are false.
-	 */
-	public String getGPSString(String preference_stamp_gpsformat, boolean store_location, Location location, boolean store_geo_direction, double geo_direction) {
-		String gps_stamp = "";
-		if( !preference_stamp_gpsformat.equals("preference_stamp_gpsformat_none") ) {
-			if( store_location ) {
-				if( preference_stamp_gpsformat.equals("preference_stamp_gpsformat_dms") )
-					gps_stamp += LocationSupplier.locationToDMS(location.getLatitude()) + ", " + LocationSupplier.locationToDMS(location.getLongitude());
-				else
-					gps_stamp += Location.convert(location.getLatitude(), Location.FORMAT_DEGREES) + ", " + Location.convert(location.getLongitude(), Location.FORMAT_DEGREES);
-				if( location.hasAltitude() ) {
-					gps_stamp += ", " + decimalFormat.format(location.getAltitude()) + this.getResources().getString(R.string.metres_abbreviation);
-				}
-			}
-			if( store_geo_direction ) {
-				float geo_angle = (float)Math.toDegrees(geo_direction);
-				if( geo_angle < 0.0f ) {
-					geo_angle += 360.0f;
-				}
-				if( MyDebug.LOG )
-					Log.d(TAG, "geo_angle: " + geo_angle);
-				if( gps_stamp.length() > 0 )
-					gps_stamp += ", ";
-				gps_stamp += "" + Math.round(geo_angle) + (char)0x00B0;
-			}
-		}
-		return gps_stamp;
 	}
 
 	// for testing:

@@ -2,17 +2,13 @@ package net.sourceforge.opencamera;
 
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -756,8 +752,13 @@ public class MyApplicationInterface implements ApplicationInterface {
 		}
 		return font_size;
     }
-    
-    @Override
+
+	private String getVideoSubtitlePref() {
+		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(getContext());
+		return sharedPreferences.getString(PreferenceKeys.getVideoSubtitlePref(), "preference_video_subtitle_no");
+	}
+
+	@Override
     public int getZoomPref() {
 		if( MyDebug.LOG )
 			Log.d(TAG, "getZoomPref: " + zoom_factor);
@@ -931,27 +932,24 @@ public class MyApplicationInterface implements ApplicationInterface {
 	public void startedVideo() {
 		if( MyDebug.LOG )
 			Log.d(TAG, "startedVideo()");
+		if( Build.VERSION.SDK_INT >= Build.VERSION_CODES.N ) {
+			if( !( main_activity.getMainUI().inImmersiveMode() && main_activity.usingKitKatImmersiveModeEverything() ) ) {
+				View pauseVideoButton = main_activity.findViewById(R.id.pause_video);
+				pauseVideoButton.setVisibility(View.VISIBLE);
+			}
+			main_activity.getMainUI().setPauseVideoContentDescription();
+		}
 		final int video_method = this.createOutputVideoMethod();
-		boolean dategeo_subtitles = false; // TODO
+		boolean dategeo_subtitles = getVideoSubtitlePref().equals("preference_video_subtitle_yes");
 		if( dategeo_subtitles && video_method != ApplicationInterface.VIDEOMETHOD_URI ) {
 			final String preference_stamp_dateformat = this.getStampDateFormatPref();
 			final String preference_stamp_timeformat = this.getStampTimeFormatPref();
 			final String preference_stamp_gpsformat = this.getStampGPSFormatPref();
 			final boolean store_location = getGeotaggingPref() && getLocation() != null;
-			final Location location = store_location ? getLocation() : null;
 			final boolean store_geo_direction = main_activity.getPreview().hasGeoDirection() && getGeodirectionPref();
-			final double geo_direction = store_geo_direction ? main_activity.getPreview().getGeoDirection() : 0.0;
 			class SubtitleVideoTimerTask extends TimerTask {
 				OutputStreamWriter writer;
 				private int count = 1;
-
-				private String formatTimeMS(long time_ms) {
-					int ms = (int) (time_ms) % 1000 ;
-					int seconds = (int) (time_ms / 1000) % 60 ;
-					int minutes = (int) ((time_ms / (1000*60)) % 60);
-					int hours   = (int) ((time_ms / (1000*60*60)) % 24);
-					return String.format(Locale.getDefault(), "%02d:%02d:%02d,%03d", hours, minutes, seconds, ms);
-				}
 
 				private String getSubtitleFilename(String video_filename) {
 					if( MyDebug.LOG )
@@ -971,6 +969,13 @@ public class MyApplicationInterface implements ApplicationInterface {
 						Log.d(TAG, "SubtitleVideoTimerTask run");
 					long video_time = main_activity.getPreview().getVideoTime();
 					if( !main_activity.getPreview().isVideoRecording() ) {
+						if( MyDebug.LOG )
+							Log.d(TAG, "no longer video recording");
+						return;
+					}
+					if( main_activity.getPreview().isVideoRecordingPaused() ) {
+						if( MyDebug.LOG )
+							Log.d(TAG, "video recording is paused");
 						return;
 					}
 					Date current_date = new Date();
@@ -981,9 +986,11 @@ public class MyApplicationInterface implements ApplicationInterface {
 						Log.d(TAG, "offset_ms: " + offset_ms);
 						Log.d(TAG, "video_time: " + video_time);
 					}
-					String date_stamp = MainActivity.getDateString(preference_stamp_dateformat, current_date);
-					String time_stamp = MainActivity.getTimeString(preference_stamp_timeformat, current_date);
-					String gps_stamp = main_activity.getGPSString(preference_stamp_gpsformat, store_location, location, store_geo_direction, geo_direction);
+					String date_stamp = TextFormatter.getDateString(preference_stamp_dateformat, current_date);
+					String time_stamp = TextFormatter.getTimeString(preference_stamp_timeformat, current_date);
+					Location location = store_location ? getLocation() : null;
+					double geo_direction = store_geo_direction ? main_activity.getPreview().getGeoDirection() : 0.0;
+					String gps_stamp = main_activity.getTextFormatter().getGPSString(preference_stamp_gpsformat, store_location, location, store_geo_direction, geo_direction);
 					if( MyDebug.LOG ) {
 						Log.d(TAG, "date_stamp: " + date_stamp);
 						Log.d(TAG, "time_stamp: " + time_stamp);
@@ -1009,8 +1016,8 @@ public class MyApplicationInterface implements ApplicationInterface {
 					long video_time_to = video_time_from + 999;
 					if( video_time_from < 0 )
 						video_time_from = 0;
-					String subtitle_time_from = formatTimeMS(video_time_from);
-					String subtitle_time_to = formatTimeMS(video_time_to);
+					String subtitle_time_from = TextFormatter.formatTimeMS(video_time_from);
+					String subtitle_time_to = TextFormatter.formatTimeMS(video_time_to);
 					try {
 						synchronized( this ) {
 							if( writer == null ) {
@@ -1096,6 +1103,9 @@ public class MyApplicationInterface implements ApplicationInterface {
 			Log.d(TAG, "uri " + uri);
 			Log.d(TAG, "filename " + filename);
 		}
+		View pauseVideoButton = main_activity.findViewById(R.id.pause_video);
+		pauseVideoButton.setVisibility(View.INVISIBLE);
+		main_activity.getMainUI().setPauseVideoContentDescription(); // just to be safe
 		if( subtitleVideoTimerTask != null ) {
 			subtitleVideoTimerTask.cancel();
 			subtitleVideoTimerTask = null;
@@ -1215,20 +1225,12 @@ public class MyApplicationInterface implements ApplicationInterface {
 
 	@Override
 	public void onVideoInfo(int what, int extra) {
-		if( what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED || what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED ) {
-			int message_id;
-			if( what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED ) {
-				if( MyDebug.LOG )
-					Log.d(TAG, "max duration reached");
-				message_id = R.string.video_max_duration;
-			}
-			else {
-				if( MyDebug.LOG )
-					Log.d(TAG, "max filesize reached");
-				message_id = R.string.video_max_filesize;
-			}
-			if( message_id != 0 )
-				main_activity.getPreview().showToast(null, message_id);
+		// we don't show a toast for MEDIA_RECORDER_INFO_MAX_DURATION_REACHED - conflicts with "n repeats to go" toast from Preview
+		if( what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED ) {
+			if( MyDebug.LOG )
+				Log.d(TAG, "max filesize reached");
+			int message_id = R.string.video_max_filesize;
+			main_activity.getPreview().showToast(null, message_id);
 			// in versions 1.24 and 1.24, there was a bug where we had "info_" for onVideoError and "error_" for onVideoInfo!
 			// fixed in 1.25; also was correct for 1.23 and earlier
 			String debug_value = "info_" + what + "_" + extra;
@@ -1357,11 +1359,19 @@ public class MyApplicationInterface implements ApplicationInterface {
     	drawPreview.turnFrontScreenFlashOn();
     }
 
+	@Override
+	public void onCaptureStarted() {
+		if( MyDebug.LOG )
+			Log.d(TAG, "onCaptureStarted");
+		drawPreview.onCaptureStarted();
+	}
+
     @Override
 	public void onPictureCompleted() {
 		if( MyDebug.LOG )
 			Log.d(TAG, "onPictureCompleted");
 		// call this, so that if pause-preview-after-taking-photo option is set, we remove the "taking photo" border indicator straight away
+		// also even for normal (not pausing) behaviour, good to remove the border asap
     	drawPreview.cameraInOperation(false);
     }
 
@@ -1607,15 +1617,21 @@ public class MyApplicationInterface implements ApplicationInterface {
     	drawPreview.onDrawPreview(canvas);
     }
 
+	public enum Alignment {
+		ALIGNMENT_TOP,
+		ALIGNMENT_CENTRE,
+		ALIGNMENT_BOTTOM
+	}
+
     public void drawTextWithBackground(Canvas canvas, Paint paint, String text, int foreground, int background, int location_x, int location_y) {
-		drawTextWithBackground(canvas, paint, text, foreground, background, location_x, location_y, false);
+		drawTextWithBackground(canvas, paint, text, foreground, background, location_x, location_y, Alignment.ALIGNMENT_BOTTOM);
 	}
 
-	public void drawTextWithBackground(Canvas canvas, Paint paint, String text, int foreground, int background, int location_x, int location_y, boolean align_top) {
-		drawTextWithBackground(canvas, paint, text, foreground, background, location_x, location_y, align_top, null, true);
+	public void drawTextWithBackground(Canvas canvas, Paint paint, String text, int foreground, int background, int location_x, int location_y, Alignment alignment_y) {
+		drawTextWithBackground(canvas, paint, text, foreground, background, location_x, location_y, alignment_y, null, true);
 	}
 
-	public void drawTextWithBackground(Canvas canvas, Paint paint, String text, int foreground, int background, int location_x, int location_y, boolean align_top, String ybounds_text, boolean shadow) {
+	public void drawTextWithBackground(Canvas canvas, Paint paint, String text, int foreground, int background, int location_x, int location_y, Alignment alignment_y, String ybounds_text, boolean shadow) {
 		final float scale = getContext().getResources().getDisplayMetrics().density;
 		paint.setStyle(Paint.Style.FILL);
 		paint.setColor(background);
@@ -1643,13 +1659,20 @@ public class MyApplicationInterface implements ApplicationInterface {
 			Log.d(TAG, "text_bounds left-right: " + text_bounds.left + " , " + text_bounds.right);*/
 		text_bounds.left += location_x - padding;
 		text_bounds.right += location_x + padding;
-		if( align_top ) {
+		// unclear why we need the offset of -1, but need this to align properly on Galaxy Nexus at least
+		int top_y_diff = - text_bounds.top + padding - 1;
+		if( alignment_y == Alignment.ALIGNMENT_TOP ) {
 			int height = text_bounds.bottom - text_bounds.top + 2*padding;
-			// unclear why we need the offset of -1, but need this to align properly on Galaxy Nexus at least
-			int y_diff = - text_bounds.top + padding - 1;
 			text_bounds.top = location_y - 1;
 			text_bounds.bottom = text_bounds.top + height;
-			location_y += y_diff;
+			location_y += top_y_diff;
+		}
+		else if( alignment_y == Alignment.ALIGNMENT_CENTRE ) {
+			int height = text_bounds.bottom - text_bounds.top + 2*padding;
+			int y_diff = - text_bounds.top + padding - 1;
+			text_bounds.top = (int)(0.5 * ( (location_y - 1) + (text_bounds.top + location_y - padding) )); // average of ALIGNMENT_TOP and ALIGNMENT_BOTTOM
+			text_bounds.bottom = text_bounds.top + height;
+			location_y += (int)(0.5*top_y_diff); // average of ALIGNMENT_TOP and ALIGNMENT_BOTTOM
 		}
 		else {
 			text_bounds.top += location_y - padding;

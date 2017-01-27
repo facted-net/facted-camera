@@ -355,7 +355,7 @@ public class MyPreferenceFragment extends PreferenceFragment implements OnShared
             			return true;
                     }
             		else {
-                		FolderChooserDialog fragment = new FolderChooserDialog();
+						FolderChooserDialog fragment = new SaveFolderChooserDialog();
                 		fragment.show(getFragmentManager(), "FOLDER_FRAGMENT");
                     	return true;
             		}
@@ -612,6 +612,8 @@ public class MyPreferenceFragment extends PreferenceFragment implements OnShared
                         about_string.append(getString(supports_raw ? R.string.about_available : R.string.about_not_available));
                         about_string.append("\nVideo stabilization?: ");
                         about_string.append(getString(supports_video_stabilization ? R.string.about_available : R.string.about_not_available));
+						about_string.append("\nCan disable shutter sound?: ");
+						about_string.append(getString(can_disable_shutter_sound ? R.string.answer_yes : R.string.answer_no));
                         about_string.append("\nFlash modes: ");
                 		String [] flash_values = bundle.getStringArray("flash_values");
                 		if( flash_values != null && flash_values.length > 0 ) {
@@ -772,7 +774,21 @@ public class MyPreferenceFragment extends PreferenceFragment implements OnShared
             });
         }
 	}
-	
+
+	public static class SaveFolderChooserDialog extends FolderChooserDialog {
+		@Override
+		public void onDismiss(DialogInterface dialog) {
+			if( MyDebug.LOG )
+				Log.d(TAG, "FolderChooserDialog dismissed");
+			// n.b., fragments have to be static (as they might be inserted into a new Activity - see http://stackoverflow.com/questions/15571010/fragment-inner-class-should-be-static),
+			// so we access the MainActivity via the fragment's getActivity().
+			MainActivity main_activity = (MainActivity)this.getActivity();
+			String new_save_location = this.getChosenFolder();
+			main_activity.updateSaveFolder(new_save_location);
+			super.onDismiss(dialog);
+		}
+	}
+
 	/*private void readFromBundle(Bundle bundle, String intent_key, String preference_key, String default_value, String preference_category_key) {
 		if( MyDebug.LOG ) {
 			Log.d(TAG, "readFromBundle: " + intent_key);

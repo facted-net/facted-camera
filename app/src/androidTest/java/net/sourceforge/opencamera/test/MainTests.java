@@ -12,6 +12,7 @@ public class MainTests {
 		TestSuite suite = new TestSuite(MainTests.class.getName());
 		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testStartCameraPreviewCount"));
 		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testSaveVideoMode"));
+		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testSaveFocusMode"));
 		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testSaveFlashTorchQuit"));
 		//suite.addTest(TestSuite.createTest(MainActivityTest.class, "testSaveFlashTorchSwitchCamera"));
 		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testFlashStartup"));
@@ -55,6 +56,7 @@ public class MainTests {
 		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testFailOpenCamera"));
 		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testAudioControlIcon"));
 		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testOnError"));
+		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testGPSString"));
         return suite;
     }
 }

@@ -4,7 +4,7 @@ import net.sourceforge.opencamera.MyDebug;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 
 import android.annotation.TargetApi;
@@ -100,10 +100,14 @@ public class CameraController1 extends CameraController {
 	@Override
 	public void onError() {
 		Log.e(TAG, "onError");
-		this.camera.release();
-		this.camera = null;
-		// need to communicate the problem to the application
-		this.camera_error_cb.onError();
+		if( this.camera != null ) { // I got Google Play crash reports due to camera being null in v1.36
+			this.camera.release();
+			this.camera = null;
+		}
+		if( this.camera_error_cb != null ) {
+			// need to communicate the problem to the application
+			this.camera_error_cb.onError();
+		}
 	}
 	
 	private class CameraErrorCallback implements Camera.ErrorCallback {
@@ -354,6 +358,34 @@ public class CameraController1 extends CameraController {
         	camera_features.can_disable_shutter_sound = false;
         }
 
+		// Determine view angles. Note that these can vary based on the resolution - and since we read these before the caller has
+		// set the desired resolution, this isn't strictly correct. However these are presumably view angles for the photo anyway,
+		// when some callers (e.g., DrawPreview) want view angles for the preview anyway - so these will only be an approximation for
+		// what we want anyway.
+		final float default_view_angle_x = 55.0f;
+		final float default_view_angle_y = 43.0f;
+		try {
+			camera_features.view_angle_x = parameters.getHorizontalViewAngle();
+			camera_features.view_angle_y = parameters.getVerticalViewAngle();
+		}
+		catch(Exception e) {
+			// apparently some devices throw exceptions...
+			e.printStackTrace();
+			Log.e(TAG, "exception reading horizontal or vertical view angles");
+			camera_features.view_angle_x = default_view_angle_x;
+			camera_features.view_angle_y = default_view_angle_y;
+		}
+		if( MyDebug.LOG ) {
+			Log.d(TAG, "view_angle_x: " + camera_features.view_angle_x);
+			Log.d(TAG, "view_angle_y: " + camera_features.view_angle_y);
+		}
+		// need to handle some devices reporting rubbish
+		if( camera_features.view_angle_x > 150.0f || camera_features.view_angle_y > 150.0f ) {
+			Log.e(TAG, "camera API reporting stupid view angles, set to sensible defaults");
+			camera_features.view_angle_x = default_view_angle_x;
+			camera_features.view_angle_y = default_view_angle_y;
+		}
+
 		return camera_features;
 	}
 	
@@ -378,7 +410,9 @@ public class CameraController1 extends CameraController {
 		}*/
 		SupportedValues supported_values = checkModeIsSupported(values, value, default_value);
 		if( supported_values != null ) {
-			if( !parameters.getSceneMode().equals(supported_values.selected_value) ) {
+			String scene_mode = parameters.getSceneMode();
+			// if scene mode is null, it should mean scene modes aren't supported anyway
+			if( scene_mode != null && !scene_mode.equals(supported_values.selected_value) ) {
 	        	parameters.setSceneMode(supported_values.selected_value);
 	        	setCameraParameters(parameters);
 			}
@@ -449,8 +483,17 @@ public class CameraController1 extends CameraController {
 			String [] isos_array = iso_values.split(",");
 			// split shouldn't return null
 			if( isos_array.length > 0 ) {
+				// remove duplicates (OnePlus 3T has several duplicate "auto" entries)
+				HashSet<String> hashSet = new HashSet<>();
 				values = new ArrayList<>();
-				Collections.addAll(values, isos_array);
+				// use hashset for efficiency
+				// make sure we alo preserve the order
+				for(String iso : isos_array) {
+					if( !hashSet.contains(iso) ) {
+						values.add(iso);
+						hashSet.add(iso);
+					}
+				}
 			}
 		}
 
@@ -528,6 +571,12 @@ public class CameraController1 extends CameraController {
 	@Override
 	public void setManualISO(boolean manual_iso, int iso) {
 		// not supported for CameraController1
+	}
+
+	@Override
+	public boolean isManualISO() {
+		// not supported for CameraController1
+		return false;
 	}
 
 	@Override
@@ -1158,7 +1207,8 @@ public class CameraController1 extends CameraController {
 		camera.setFaceDetectionListener(new CameraFaceDetectionListener());
 	}
 
-	public void autoFocus(final CameraController.AutoFocusCallback cb) {
+	@Override
+	public void autoFocus(final CameraController.AutoFocusCallback cb, boolean capture_follows_autofocus_hint) {
 		if( MyDebug.LOG )
 			Log.d(TAG, "autoFocus");
         Camera.AutoFocusCallback camera_cb = new Camera.AutoFocusCallback() {
@@ -1195,7 +1245,13 @@ public class CameraController1 extends CameraController {
 			cb.onAutoFocus(false);
 		}
 	}
-	
+
+	@Override
+	public void setCaptureFollowAutofocusHint(boolean capture_follows_autofocus_hint) {
+		// unused by this API
+	}
+
+	@Override
 	public void cancelAutoFocus() {
 		try {
 			camera.cancelAutoFocus();
@@ -1264,6 +1320,11 @@ public class CameraController1 extends CameraController {
     	    }
         };
 
+		if( picture != null ) {
+			if( MyDebug.LOG )
+				Log.d(TAG, "call onStarted() in callback");
+			picture.onStarted();
+		}
         try {
         	camera.takePicture(shutter, null, camera_jpeg);
         }

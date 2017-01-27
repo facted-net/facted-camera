@@ -33,12 +33,6 @@
 
 <body>
 
-<p><small><b>More of my Free software:</b>
-<a href="http://wifiremoteplay.sourceforge.net">Wifi Remote Play</a> ~
-<a href="http://erebusrpg.sourceforge.net">Erebus RPG</a>
-</small>
-</p>
-
 <img align="left" src="ic_launcher.png" alt="Open Camera icon" title="Open Camera icon" width="72" height="72">
 <hr>
 <center><h2>Open Camera</h2></center>
@@ -98,12 +92,13 @@ browsers -->
 <li>Disable shutter sound.</li>
 <li>Overlay a choice of grids (including "rule of thirds") and crop guides.</li>
 <li>Optional GPS location tagging (geotagging) of photos and videos; for photos this includes compass direction (GPSImgDirection, GPSImgDirectionRef).</li>
-<li>Apply a date and timestamp, location coordinates, and custom text to photos.</li>
+<li>Apply a date and timestamp, location coordinates, and custom text to photos; store date/time and location as video subtitles (.SRT).</li>
 <li>Yes you can take a selfie (also known as front camera), includes support for "screen flash".</li>
 <li>Support for (some) external microphones.</li>
 <li>Widget to automatically take a photo after launching.</li>
 <li>Support for Android 5 Camera2 API: manual focus distance; manual ISO; manual exposure time; RAW (DNG) files.</li>
 <li>Support for <a href="help.html#hdr">HDR</a> and Exposure Bracketing (Camera2 only).</li>
+<li>Dynamic range optimisation mode for better quality photos.</li>
 <li>Small file size.</li>
 <li>Completely free, and no ads in the app. Open Source.</li>
 </ul>
@@ -248,7 +243,7 @@ available from
 <!--<li>App icon/logo, take_photo.png, take_photo_pressed.png from <a href="https://www.iconfinder.com/icons/81087/mb_photo_icon#size=128">https://www.iconfinder.com/&#8203;icons/81087/&#8203;mb_photo_icon#size=128</a> , by Yankoa - http://yankoa.deviantart.com/ , under <a href="http://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</li>-->
 <li>take_video.png, take_video_pressed.png from <a href="https://www.iconfinder.com/icons/81197/mb_rec_video_icon#size=128">https://www.iconfinder.com/&#8203;icons/81197/&#8203;mb_rec_video_icon#size=128</a> , by Yankoa - http://yankoa.deviantart.com/ , under <a href="http://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</li>
 <!--<li>trash.png from <a href="https://www.iconfinder.com/icons/115789/trash_icon#size=128">https://www.iconfinder.com/&#8203;icons/115789/&#8203;trash_icon#size=128</a> , by Designmodo, under <a href="http://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</li>-->
-<li>flash_auto.png, flash_off.png, flash_on.png, ic_burst_mode_white_48dp.png, ic_exposure_white_48dp.png, ic_face_white_48dp.png, ic_info_outline_white_48dp.png, ic_help_outline_white_48dp.png, ic_mic_red_48dp.png, ic_mic_white_48dp.png, ic_more_horiz_white_48dp.png, ic_photo_camera_white_48dp.png, ic_photo_size_select_large_white_48dp.png, ic_power_settings_new_white_48dp.png, ic_save_white_48dp.png, ic_timer_white_48dp.png, popup*.png, ic_touch_app_white_48dp.png, ic_videocam_white_48dp.png, settings.png, share.png, switch_camera.png, trash.png - from <a href="https://developer.android.com/design/downloads/index.html">https://developer.android.com/&#8203;design/downloads/index.html</a> / <a href="https://github.com/google/material-design-icons/">https://github.com/google/material-design-icons/</a> / <a href="https://design.google.com/icons/">https://design.google.com/icons/</a>, by Google, under <a href="http://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</li>
+<li>flash_auto.png, flash_off.png, flash_on.png, ic_burst_mode_white_48dp.png, ic_exposure_white_48dp.png, ic_face_white_48dp.png, ic_info_outline_white_48dp.png, ic_help_outline_white_48dp.png, ic_mic_red_48dp.png, ic_mic_white_48dp.png, ic_more_horiz_white_48dp.png, ic_pause_circle_outline_white_48dp.png, ic_photo_camera_white_48dp.png, ic_photo_size_select_large_white_48dp.png, ic_power_settings_new_white_48dp.png, ic_save_white_48dp.png, ic_timer_white_48dp.png, popup*.png, ic_touch_app_white_48dp.png, ic_videocam_white_48dp.png, settings.png, share.png, switch_camera.png, trash.png - from <a href="https://developer.android.com/design/downloads/index.html">https://developer.android.com/&#8203;design/downloads/index.html</a> / <a href="https://github.com/google/material-design-icons/">https://github.com/google/material-design-icons/</a> / <a href="https://design.google.com/icons/">https://design.google.com/icons/</a>, by Google, under <a href="http://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</li>
 <li>beep.ogg, beep_hi.ogg - from <a href="http://opengameart.org/content/interface-beeps">http://opengameart.org/&#8203;content/interface-beeps</a> , by bart, under CC0 (public domain).</li>
 </ul>
 
@@ -256,7 +251,36 @@ available from
 <!-- we use a textarea rather than pre, so that we don't have problems on mobile devices where the width is too wide for the screen - having a horizontal scrollbar seems nicer than having wordwrapping. -->
 <!-- note, the rows and cols attributes are overridden by the style width/height, but we still specify the rows/cols attributes for older browsers (and also required for html validation) -->
 <textarea readonly rows="20" cols="80" style="width:100%; height:50%; white-space: pre; word-wrap: normal; overflow-x: scroll">
-Version 1.36 (Work in progress)
+
+Version 1.37 (Work in progress)
+
+FIXED   Crash on devices not supporting scene mode.
+FIXED   Crash if failed to start audio listener (for "loud noise").
+FIXED   Problems with focusing on OnePlus 3T with Android 7.
+FIXED   Problems with "alternative" flash method for Camera2 API on OnePlus 3T.
+FIXED   Support for long manual exposure times (with Camera2 API) (e.g.,
+        OnePlus 3T).
+FIXED   Remove duplicate entries from ISO buttons (e.g., for OnePlus 3T).
+FIXED   Shutter sound option wasn't working for Camera2 API unless a photo had
+        previously been taken in the same session.
+UPDATED Improved support for flash auto decision on when to take a photo, when
+        using "alternative" flash method and/or HDR, expo bracketing for
+        Camera2 API (it now matches the decision when not using the alternative
+        flash method).
+UPDATED Display "Capturing..." when manual exposure time is 0.5s or longer.
+UPDATED Improved popup view so selected button is centred rather than aligned
+        left.
+UPDATED Continuous focus is now the default for new installs on all devices.
+
+Version 1.36.2 (2017/01/01)
+
+FIXED   Save location folder dialog wasn't working from Settings in 1.36.
+
+Version 1.36.1 (2016/12/31)
+
+FIXED   Fixed a couple of crashes.
+
+Version 1.36 (2016/12/28)
 
 FIXED   "Loud noise" audio control wasn't working.
 FIXED   Remember focus mode for video mode.
@@ -266,22 +290,38 @@ FIXED   Improved behaviour for photo/video mode when launched from a take photo
         when pause/resuming if called from a photo intent; now allows switching
         to photo mode if called from a video intent).
 FIXED   Make line-spacing for toasts more consistent.
+FIXED   Improved "Max duration of video", was stopping up to a second
+        prematurely.
 ADDED   New photo mode "DRO" (dynamic range optimisation) (requires Android 5).
 ADDED   Quick settings tiles to open camera (requires Android 7): tiles for
         photo, video and selfie mode.
+ADDED   Pause/resume video recording (requires Android 7).
 ADDED   New option to mirror photos for front camera (Settings/Photo settings/
         "Front camera mirror").
 ADDED   Option to calibrate the level angle (accelerometer) (see Settings/More
         camera controls/"Calibrate level angle".
-ADDED   New option to display on-screen altitude lines (Settings/On screen GUI/
-        "Show altitude lines").
+ADDED   New option to display on-screen pitch lines (Settings/On screen GUI/
+        "Show pitch lines") and compass direction lines (Settings/
+        On screen GUI/"Show compass direction lines").
 ADDED   Camera2 API popup menu now has "ISO M" option to switch straight to
         manual exposure mode, but defaulting to the current ISO value.
+ADDED   New option "Video subtitles" (Settings/Video settings/). This creates a
+        subtitle file (in .SRT format) displaying date and time; and also GPS
+        location and direction if those options are enabled
+ADDED   New option to disable showing the "take photo" button (under Settings/
+        On screen GUI/"Show take photo icon").
+ADDED   3 seconds entry for "Max duration of video" option.
 UPDATED HDR now has auto-alignment for better quality photos.
 UPDATED Moved white balance/scene mode/color effect options lower down the
         popup menu.
 UPDATED No longer auto-stabilise or display level angle when device pointing
         nearly up or down.
+UPDATED Apply low pass filter for compass direction.
+UPDATED Continuous focus mode is now the default for back camera for Nexus and
+        Pixel devices.
+UPDATED About/debug info now shows whether disabling shutter sound is supported.
+UPDATED Updated Russian translation (thanks to Grigorii Chirkov).
+UPDATED Updated Slovenian translation (thanks to Peter Klofutar).
 
 Version 1.35 (2016/10/30)
 

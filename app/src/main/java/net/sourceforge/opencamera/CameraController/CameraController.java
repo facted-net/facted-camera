@@ -33,6 +33,11 @@ public abstract class CameraController {
 	public int count_camera_parameters_exception;
 	public int count_precapture_timeout;
 	public boolean test_wait_capture_result; // whether to test delayed capture result in Camera2 API
+	public volatile int test_capture_results; // for Camera2 API, only many capture requests completed with RequestTag.CAPTURE
+	public volatile int test_fake_flash_focus; // for Camera2 API, records torch turning on for fake flash during autofocus
+	public volatile int test_fake_flash_precapture; // for Camera2 API, records torch turning on for fake flash during precapture
+	public volatile int test_fake_flash_photo; // for Camera2 API, records torch turning on for fake flash for photo capture
+	public volatile int test_af_state_null_focus; // for Camera2 API, records af_state being null even when we've requested autofocus
 
 	public static class CameraFeatures {
 		public boolean is_zoom_supported;
@@ -41,6 +46,7 @@ public abstract class CameraController {
 		public boolean supports_face_detection;
 		public List<CameraController.Size> picture_sizes;
 		public List<CameraController.Size> video_sizes;
+		public List<CameraController.Size> video_sizes_high_speed;
 		public List<CameraController.Size> preview_sizes;
 		public List<String> supported_flash_values;
 		public List<String> supported_focus_values;
@@ -60,6 +66,8 @@ public abstract class CameraController {
 		public boolean can_disable_shutter_sound;
 		public boolean supports_expo_bracketing;
 		public boolean supports_raw;
+		public float view_angle_x; // horizontal angle of view in degrees (when unzoomed)
+		public float view_angle_y; // view angle of view in degrees (when unzoomed)
 	}
 
 	public static class Size {
@@ -108,6 +116,7 @@ public abstract class CameraController {
 	}
 	
 	public interface PictureCallback {
+		void onStarted(); // called immediately before we start capturing the picture
 		void onCompleted(); // called after all relevant on*PictureTaken() callbacks have been called and returned
 		void onPictureTaken(byte[] data);
 		/** Only called if RAW is requested.
@@ -170,6 +179,9 @@ public abstract class CameraController {
 		return cameraId;
 	}
 	public abstract SupportedValues setSceneMode(String value);
+	/**
+	 * @return The current scene mode. Will be null if scene mode not supported.
+     */
 	public abstract String getSceneMode();
 	public abstract SupportedValues setColorEffect(String value);
 	public abstract String getColorEffect();
@@ -185,6 +197,11 @@ public abstract class CameraController {
 	 *            If manual_iso i false, this value is ignored.
 	 */
 	public abstract void setManualISO(boolean manual_iso, int iso);
+
+	/**
+	 * @return Whether in manual ISO mode (as opposed to auto).
+     */
+	public abstract boolean isManualISO();
 	/** Specify a specific ISO value. Only supported if supports_iso_range is true. Callers should
 	 *  first switch to manual ISO mode using setManualISO().
 	 */
@@ -284,7 +301,17 @@ public abstract class CameraController {
 	public abstract void stopPreview();
 	public abstract boolean startFaceDetection();
 	public abstract void setFaceDetectionListener(final CameraController.FaceDetectionListener listener);
-	public abstract void autoFocus(final CameraController.AutoFocusCallback cb);
+
+	/**
+	 * @param cb Callback to be called when autofocus completes.
+	 * @param capture_follows_autofocus_hint Set to true if you intend to take a photo immediately after autofocus. If the
+	 *                                       decision changes after autofocus has started (e.g., user initiates autofocus,
+	 *                                       then takes photo before autofocus has completed), use setCaptureFollowAutofocusHint().
+     */
+	public abstract void autoFocus(final CameraController.AutoFocusCallback cb, boolean capture_follows_autofocus_hint);
+	/** See autoFocus() for details - used to update the capture_follows_autofocus_hint setting.
+     */
+	public abstract void setCaptureFollowAutofocusHint(boolean capture_follows_autofocus_hint);
 	public abstract void cancelAutoFocus();
 	public abstract void setContinuousFocusMoveCallback(ContinuousFocusMoveCallback cb);
 	public abstract void takePicture(final CameraController.PictureCallback picture, final ErrorCallback error);

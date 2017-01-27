@@ -7,12 +7,16 @@ import net.sourceforge.opencamera.CameraController.CameraController2;
 import net.sourceforge.opencamera.LocationSupplier;
 import net.sourceforge.opencamera.Preview.Preview;
 import net.sourceforge.opencamera.Preview.VideoQualityHandler;
+import net.sourceforge.opencamera.TextFormatter;
 
 import org.junit.Test;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.Assert.*;
 
@@ -96,6 +100,51 @@ public class UnitTest {
 		location_string = LocationSupplier.locationToDMS(-147.00938);
 		Log.d(TAG, "location_string: " + location_string);
 		assertTrue(location_string.equals("-147°0'33\""));
+	}
+
+	@Test
+	public void testDateString() throws ParseException {
+		Log.d(TAG, "testDateString");
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd", Locale.US);
+		Date date1 = sdf.parse("2017/01/31");
+		assertEquals( TextFormatter.getDateString("preference_stamp_dateformat_none", date1), "" );
+		assertEquals( TextFormatter.getDateString("preference_stamp_dateformat_yyyymmdd", date1), "2017/01/31" );
+		assertEquals( TextFormatter.getDateString("preference_stamp_dateformat_ddmmyyyy", date1), "31/01/2017" );
+		assertEquals( TextFormatter.getDateString("preference_stamp_dateformat_mmddyyyy", date1), "01/31/2017" );
+	}
+
+	@Test
+	public void testTimeString() throws ParseException {
+		Log.d(TAG, "testTimeString");
+		SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss", Locale.US);
+		Date time1 = sdf.parse("00:00:00");
+		assertEquals( TextFormatter.getTimeString("preference_stamp_timeformat_none", time1), "" );
+		assertEquals( TextFormatter.getTimeString("preference_stamp_timeformat_12hour", time1), "12:00:00 AM" );
+		assertEquals( TextFormatter.getTimeString("preference_stamp_timeformat_24hour", time1), "00:00:00" );
+		Date time2 = sdf.parse("08:15:43");
+		assertEquals( TextFormatter.getTimeString("preference_stamp_timeformat_none", time2), "" );
+		assertEquals( TextFormatter.getTimeString("preference_stamp_timeformat_12hour", time2), "08:15:43 AM" );
+		assertEquals( TextFormatter.getTimeString("preference_stamp_timeformat_24hour", time2), "08:15:43" );
+		Date time3 = sdf.parse("12:00:00");
+		assertEquals( TextFormatter.getTimeString("preference_stamp_timeformat_none", time3), "" );
+		assertEquals( TextFormatter.getTimeString("preference_stamp_timeformat_12hour", time3), "12:00:00 PM" );
+		assertEquals( TextFormatter.getTimeString("preference_stamp_timeformat_24hour", time3), "12:00:00" );
+		Date time4 = sdf.parse("13:53:06");
+		assertEquals( TextFormatter.getTimeString("preference_stamp_timeformat_none", time4), "" );
+		assertEquals( TextFormatter.getTimeString("preference_stamp_timeformat_12hour", time4), "01:53:06 PM" );
+		assertEquals( TextFormatter.getTimeString("preference_stamp_timeformat_24hour", time4), "13:53:06" );
+	}
+
+	@Test
+	public void testFormatTime() {
+		Log.d(TAG, "testFormatTime");
+		assertEquals( TextFormatter.formatTimeMS(952), "00:00:00,952" );
+		assertEquals( TextFormatter.formatTimeMS(1092), "00:00:01,092" );
+		assertEquals( TextFormatter.formatTimeMS(37301), "00:00:37,301" );
+		assertEquals( TextFormatter.formatTimeMS(306921), "00:05:06,921" );
+		assertEquals( TextFormatter.formatTimeMS(5391002), "01:29:51,002" );
+		assertEquals( TextFormatter.formatTimeMS(92816837), "25:46:56,837" );
+		assertEquals( TextFormatter.formatTimeMS(792816000), "220:13:36,000" );
 	}
 
 	@Test
@@ -186,12 +235,17 @@ public class UnitTest {
 		video_quality_handler.setVideoSizes(video_sizes);
 		video_quality_handler.sortVideoSizes();
 
-		HashMap<Integer, VideoQualityHandler.Dimension2D> profiles = new HashMap<>();
-		profiles.put(CamcorderProfile.QUALITY_HIGH, new VideoQualityHandler.Dimension2D(1920, 1080));
-		profiles.put(CamcorderProfile.QUALITY_1080P, new VideoQualityHandler.Dimension2D(1920, 1080));
-		profiles.put(CamcorderProfile.QUALITY_720P, new VideoQualityHandler.Dimension2D(1280, 720));
-		profiles.put(CamcorderProfile.QUALITY_LOW, new VideoQualityHandler.Dimension2D(1280, 720));
-		video_quality_handler.initialiseVideoQualityFromProfiles(profiles);
+		List<Integer> profiles = new ArrayList<>();
+		List<VideoQualityHandler.Dimension2D> dimensions = new ArrayList<>();
+		profiles.add(CamcorderProfile.QUALITY_HIGH);
+		dimensions.add(new VideoQualityHandler.Dimension2D(1920, 1080));
+		profiles.add(CamcorderProfile.QUALITY_1080P);
+		dimensions.add(new VideoQualityHandler.Dimension2D(1920, 1080));
+		profiles.add(CamcorderProfile.QUALITY_720P);
+		dimensions.add(new VideoQualityHandler.Dimension2D(1280, 720));
+		profiles.add(CamcorderProfile.QUALITY_LOW);
+		dimensions.add(new VideoQualityHandler.Dimension2D(1280, 720));
+		video_quality_handler.initialiseVideoQualityFromProfiles(profiles, dimensions);
 
 		List<String> video_quality = video_quality_handler.getSupportedVideoQuality();
 		List<String> exp_video_quality = new ArrayList<>();
@@ -214,11 +268,15 @@ public class UnitTest {
 		video_quality_handler.setVideoSizes(video_sizes);
 		video_quality_handler.sortVideoSizes();
 
-		HashMap<Integer, VideoQualityHandler.Dimension2D> profiles = new HashMap<>();
-		profiles.put(CamcorderProfile.QUALITY_HIGH, new VideoQualityHandler.Dimension2D(1920, 1080));
-		profiles.put(CamcorderProfile.QUALITY_720P, new VideoQualityHandler.Dimension2D(1280, 720));
-		profiles.put(CamcorderProfile.QUALITY_LOW, new VideoQualityHandler.Dimension2D(1280, 720));
-		video_quality_handler.initialiseVideoQualityFromProfiles(profiles);
+		List<Integer> profiles = new ArrayList<>();
+		List<VideoQualityHandler.Dimension2D> dimensions = new ArrayList<>();
+		profiles.add(CamcorderProfile.QUALITY_HIGH);
+		dimensions.add(new VideoQualityHandler.Dimension2D(1920, 1080));
+		profiles.add(CamcorderProfile.QUALITY_720P);
+		dimensions.add(new VideoQualityHandler.Dimension2D(1280, 720));
+		profiles.add(CamcorderProfile.QUALITY_LOW);
+		dimensions.add(new VideoQualityHandler.Dimension2D(1280, 720));
+		video_quality_handler.initialiseVideoQualityFromProfiles(profiles, dimensions);
 
 		List<String> video_quality = video_quality_handler.getSupportedVideoQuality();
 		List<String> exp_video_quality = new ArrayList<>();
@@ -251,15 +309,23 @@ public class UnitTest {
 		video_quality_handler.setVideoSizes(video_sizes);
 		video_quality_handler.sortVideoSizes();
 
-		HashMap<Integer, VideoQualityHandler.Dimension2D> profiles = new HashMap<>();
-		profiles.put(CamcorderProfile.QUALITY_HIGH, new VideoQualityHandler.Dimension2D(1920, 1080));
-		profiles.put(CamcorderProfile.QUALITY_1080P, new VideoQualityHandler.Dimension2D(1920, 1080));
-		profiles.put(CamcorderProfile.QUALITY_720P, new VideoQualityHandler.Dimension2D(1280, 720));
-		profiles.put(CamcorderProfile.QUALITY_480P, new VideoQualityHandler.Dimension2D(720, 480));
-		profiles.put(CamcorderProfile.QUALITY_CIF, new VideoQualityHandler.Dimension2D(352, 288));
-		profiles.put(CamcorderProfile.QUALITY_QVGA, new VideoQualityHandler.Dimension2D(320, 240));
-		profiles.put(CamcorderProfile.QUALITY_LOW, new VideoQualityHandler.Dimension2D(320, 240));
-		video_quality_handler.initialiseVideoQualityFromProfiles(profiles);
+		List<Integer> profiles = new ArrayList<>();
+		List<VideoQualityHandler.Dimension2D> dimensions = new ArrayList<>();
+		profiles.add(CamcorderProfile.QUALITY_HIGH);
+		dimensions.add(new VideoQualityHandler.Dimension2D(1920, 1080));
+		profiles.add(CamcorderProfile.QUALITY_1080P);
+		dimensions.add(new VideoQualityHandler.Dimension2D(1920, 1080));
+		profiles.add(CamcorderProfile.QUALITY_720P);
+		dimensions.add(new VideoQualityHandler.Dimension2D(1280, 720));
+		profiles.add(CamcorderProfile.QUALITY_480P);
+		dimensions.add(new VideoQualityHandler.Dimension2D(720, 480));
+		profiles.add(CamcorderProfile.QUALITY_CIF);
+		dimensions.add(new VideoQualityHandler.Dimension2D(352, 288));
+		profiles.add(CamcorderProfile.QUALITY_QVGA);
+		dimensions.add(new VideoQualityHandler.Dimension2D(320, 240));
+		profiles.add(CamcorderProfile.QUALITY_LOW);
+		dimensions.add(new VideoQualityHandler.Dimension2D(320, 240));
+		video_quality_handler.initialiseVideoQualityFromProfiles(profiles, dimensions);
 
 		List<String> video_quality = video_quality_handler.getSupportedVideoQuality();
 		List<String> exp_video_quality = new ArrayList<>();
@@ -298,11 +364,15 @@ public class UnitTest {
 		video_quality_handler.setVideoSizes(video_sizes);
 		video_quality_handler.sortVideoSizes();
 
-		HashMap<Integer, VideoQualityHandler.Dimension2D> profiles = new HashMap<>();
-		profiles.put(CamcorderProfile.QUALITY_HIGH, new VideoQualityHandler.Dimension2D(1920, 1080));
-		profiles.put(CamcorderProfile.QUALITY_480P, new VideoQualityHandler.Dimension2D(640, 480));
-		profiles.put(CamcorderProfile.QUALITY_QCIF, new VideoQualityHandler.Dimension2D(176, 144));
-		video_quality_handler.initialiseVideoQualityFromProfiles(profiles);
+		List<Integer> profiles = new ArrayList<>();
+		List<VideoQualityHandler.Dimension2D> dimensions = new ArrayList<>();
+		profiles.add(CamcorderProfile.QUALITY_HIGH);
+		dimensions.add(new VideoQualityHandler.Dimension2D(1920, 1080));
+		profiles.add(CamcorderProfile.QUALITY_480P);
+		dimensions.add(new VideoQualityHandler.Dimension2D(640, 480));
+		profiles.add(CamcorderProfile.QUALITY_QCIF);
+		dimensions.add(new VideoQualityHandler.Dimension2D(176, 144));
+		video_quality_handler.initialiseVideoQualityFromProfiles(profiles, dimensions);
 
 		List<String> video_quality = video_quality_handler.getSupportedVideoQuality();
 		List<String> exp_video_quality = new ArrayList<>();

@@ -163,6 +163,10 @@ public class PreferenceKeys {
     	return "preference_stamp_style";
     }
 
+    public static String getVideoSubtitlePref() {
+        return "preference_video_subtitle";
+    }
+
     public static String getFrontCameraMirrorKey() {
         return "preference_front_camera_mirror";
     }
@@ -250,11 +254,15 @@ public class PreferenceKeys {
     public static String getShowZoomSliderControlsPreferenceKey() {
     	return "preference_show_zoom_slider_controls";
     }
-    
+
+    public static String getShowTakePhotoPreferenceKey() {
+        return "preference_show_take_photo";
+    }
+
     public static String getShowZoomPreferenceKey() {
     	return "preference_show_zoom";
     }
-    
+
     public static String getShowISOPreferenceKey() {
     	return "preference_show_iso";
     }
@@ -267,8 +275,12 @@ public class PreferenceKeys {
     	return "preference_show_angle_line";
     }
 
-    public static String getShowAltitudeLinesPreferenceKey() {
-        return "preference_show_altitude_lines";
+    public static String getShowPitchLinesPreferenceKey() {
+        return "preference_show_pitch_lines";
+    }
+
+    public static String getShowGeoDirectionLinesPreferenceKey() {
+        return "preference_show_geo_direction_lines";
     }
 
     public static String getShowAngleHighlightColorPreferenceKey() {
