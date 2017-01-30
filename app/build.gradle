@@ -19,6 +19,7 @@ android {
         jackOptions {
           enabled true
         }
+        multiDexEnabled = true
     }
 
     compileOptions {
@@ -41,7 +42,12 @@ android {
 
 dependencies {
     compile 'com.android.support:support-v4:25.0.1'
-    compile 'com.github.1AmOXsGnfXdbNg3RMTyPCHkn2aT:provenj:v3.0.0'
+    compile ('com.github.1AmOXsGnfXdbNg3RMTyPCHkn2aT:provenj:v4.0.1') {
+        exclude group: 'org.json', module: 'json'
+    }
+    compile group: 'com.adobe.xmp', name: 'xmpcore', version: '6.1.10'
+    compile group: 'com.google.guava', name: 'guava', version: '20.0'
+
     testCompile 'junit:junit:4.12'
 
     sourceCompatibility = 1.7
