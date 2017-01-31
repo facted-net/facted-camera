@@ -24,6 +24,7 @@ import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -37,6 +38,7 @@ import android.media.ExifInterface;
 import android.media.Image;
 import android.net.Uri;
 import android.os.Build;
+import android.preference.PreferenceManager;
 import android.util.Log;
 
 import com.adobe.internal.xmp.XMPException;
@@ -1230,7 +1232,11 @@ public class ImageSaver extends Thread {
 	            }
 
 				// apply Proven tags
+				SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(main_activity);
+
 				Metadata metadata = new Metadata();
+				metadata.setPreviousIPFSHash(sharedPreferences.getString(PreferenceKeys.getPreviousIPFSHashPreferenceKey(),null));
+				metadata.setPreviousFileHashes(sharedPreferences.getString(PreferenceKeys.getPreviousFileHashesPreferenceKey(),null));
 				metadata.setFileName(picFile.getName());
 				Enclosure enclosure = new Enclosure();
 				metadata = enclosure.fill(picFile, metadata, true);
@@ -1240,10 +1246,13 @@ public class ImageSaver extends Thread {
 				if( MyDebug.LOG )
 					Log.d(TAG, "ipfsHash: " + ipfsHash);
 
-				// Save file in history with GUID and IPFS hash
-				// TODO
+				// Save attributes of file for later use
+				SharedPreferences.Editor editor = sharedPreferences.edit();
+				editor.putString(PreferenceKeys.getPreviousIPFSHashPreferenceKey(), ipfsHash);
+				editor.putString(PreferenceKeys.getPreviousFileHashesPreferenceKey(), metadata.getFileHashes());
+				editor.apply();
 
-	            if( saveUri != null ) {
+				if( saveUri != null ) {
 	            	copyFileToUri(main_activity, saveUri, picFile);
 	    		    success = true;
 	    		    /* We still need to broadcastFile for SAF for two reasons:

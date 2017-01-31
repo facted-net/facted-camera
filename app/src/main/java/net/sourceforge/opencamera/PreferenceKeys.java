@@ -414,4 +414,28 @@ public class PreferenceKeys {
     public static String getImmersiveModePreferenceKey() {
     	return "preference_immersive_mode";
     }
+
+    public static String getPreviousIPFSHashPreferenceKey() {
+        return "previous_ipfs_hash";
+    }
+
+    public static String getPreviousFileHashesPreferenceKey() {
+        return "previous_file_hashes";
+    }
+
+    public static String getBitcoinBlockNumberPreferenceKey() {
+        return "bitcoin_block_number";
+    }
+
+    public static String getBitcoinBlockHashPreferenceKey() {
+        return "bitcoin_block_hash";
+    }
+
+    public static String getEthereumBlockNumberPreferenceKey() {
+        return "ethereum_block_number";
+    }
+
+    public static String getEthereumBlockHashPreferenceKey() {
+        return "ethereum_block_hash";
+    }
 }
