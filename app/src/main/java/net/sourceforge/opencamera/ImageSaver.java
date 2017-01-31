@@ -1234,7 +1234,13 @@ public class ImageSaver extends Thread {
 				metadata.setFileName(picFile.getName());
 				Enclosure enclosure = new Enclosure();
 				metadata = enclosure.fill(picFile, metadata, true);
-				enclosure.publish();
+
+				// publish to IPFS
+				String ipfsHash = enclosure.publish();
+				if( MyDebug.LOG )
+					Log.d(TAG, "ipfsHash: " + ipfsHash);
+
+				// Save file in history with GUID and IPFS hash
 
 	            if( saveUri != null ) {
 	            	copyFileToUri(main_activity, saveUri, picFile);
