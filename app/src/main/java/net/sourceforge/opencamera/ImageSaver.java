@@ -1241,6 +1241,7 @@ public class ImageSaver extends Thread {
 					Log.d(TAG, "ipfsHash: " + ipfsHash);
 
 				// Save file in history with GUID and IPFS hash
+				// TODO
 
 	            if( saveUri != null ) {
 	            	copyFileToUri(main_activity, saveUri, picFile);
