@@ -56,7 +56,10 @@ public class DrawPreview {
 	private Bitmap location_bitmap;
 	private Bitmap location_off_bitmap;
 	private final Rect location_dest = new Rect();
-	
+
+	private Bitmap flash_bitmap;
+	private final Rect flash_dest = new Rect();
+
 	private Bitmap last_thumbnail; // thumbnail of last picture taken
 	private volatile boolean thumbnail_anim; // whether we are displaying the thumbnail animation; must be volatile for test project reading the state
 	private long thumbnail_anim_start_ms = -1; // time that the thumbnail animation started
@@ -93,6 +96,7 @@ public class DrawPreview {
 
         location_bitmap = BitmapFactory.decodeResource(getContext().getResources(), R.drawable.earth);
     	location_off_bitmap = BitmapFactory.decodeResource(getContext().getResources(), R.drawable.earth_off);
+		flash_bitmap = BitmapFactory.decodeResource(getContext().getResources(), R.drawable.flash_on);
 	}
 	
 	public void onDestroy() {
@@ -106,6 +110,10 @@ public class DrawPreview {
 		if( location_off_bitmap != null ) {
 			location_off_bitmap.recycle();
 			location_off_bitmap = null;
+		}
+		if( flash_bitmap != null ) {
+			flash_bitmap.recycle();
+			flash_bitmap = null;
 		}
 	}
 
@@ -721,21 +729,27 @@ public class DrawPreview {
 		if( camera_controller != null && sharedPreferences.getBoolean(PreferenceKeys.getShowISOPreferenceKey(), true) ) {
 			p.setTextSize(14 * scale + 0.5f); // convert dps to pixels
 			p.setTextAlign(Paint.Align.LEFT);
+			// padding to align with ISO text
+			final int flash_padding = (int) (1 * scale + 0.5f); // convert dps to pixels
 			int location_x = (int) (50 * scale + 0.5f); // convert dps to pixels
 			int location_y = top_y + (int) (32 * scale + 0.5f); // convert dps to pixels
-			//int location_y2 = top_y + (int) (48 * scale + 0.5f); // convert dps to pixels
+			int location_x2 = location_x - flash_padding;
+			int location_y2 = top_y + (int) (50 * scale + 0.5f); // convert dps to pixels
+			final int flash_size = (int) (16 * scale + 0.5f); // convert dps to pixels
 			if( ui_rotation == 90 || ui_rotation == 270 ) {
 				int diff = canvas.getWidth() - canvas.getHeight();
 				location_x += diff/2;
+				location_x2 += diff/2;
 				location_y -= diff/2;
-				//location_y2 -= diff/2;
+				location_y2 -= diff/2;
 			}
 			if( ui_rotation == 90 ) {
 				location_y = canvas.getHeight() - location_y - location_size;
-				//location_y2 = canvas.getHeight() - location_y2 - location_size;
+				location_y2 = canvas.getHeight() - location_y2 - location_size;
 			}
 			if( ui_rotation == 180 ) {
 				location_x = canvas.getWidth() - location_x;
+				location_x2 = location_x - flash_size + flash_padding;
 				p.setTextAlign(Paint.Align.RIGHT);
 			}
 			String string = "";
@@ -789,6 +803,17 @@ public class DrawPreview {
 				string = preview.getFocusDistanceString(dist_min, dist_max);
 				applicationInterface.drawTextWithBackground(canvas, p, string, Color.rgb(255, 235, 59), Color.BLACK, location_x, location_y2, MyApplicationInterface.Alignment.ALIGNMENT_TOP, ybounds_text, true); // Yellow 500
 			}*/
+
+			if( camera_controller != null && camera_controller.getFlashValue().equals("flash_auto") && camera_controller.needsFlash() ) {
+				flash_dest.set(location_x2, location_y2, location_x2 + flash_size, location_y2 + flash_size);
+
+				p.setStyle(Paint.Style.FILL);
+				p.setColor(Color.BLACK);
+				p.setAlpha(64);
+				canvas.drawRect(flash_dest, p);
+				p.setAlpha(255);
+				canvas.drawBitmap(flash_bitmap, null, flash_dest, p);
+			}
 		}
 		if( preview.supportsZoom() && camera_controller != null && sharedPreferences.getBoolean(PreferenceKeys.getShowZoomPreferenceKey(), true) ) {
 			float zoom_ratio = preview.getZoomRatio();
@@ -801,6 +826,21 @@ public class DrawPreview {
 			}
 		}
 
+		int battery_x = (int) (5 * scale + 0.5f); // convert dps to pixels
+		int battery_y = top_y;
+		int battery_width = (int) (5 * scale + 0.5f); // convert dps to pixels
+		int battery_height = 4*battery_width;
+		if( ui_rotation == 90 || ui_rotation == 270 ) {
+			int diff = canvas.getWidth() - canvas.getHeight();
+			battery_x += diff/2;
+			battery_y -= diff/2;
+		}
+		if( ui_rotation == 90 ) {
+			battery_y = canvas.getHeight() - battery_y - battery_height;
+		}
+		if( ui_rotation == 180 ) {
+			battery_x = canvas.getWidth() - battery_x - battery_width;
+		}
 		if( sharedPreferences.getBoolean(PreferenceKeys.getShowBatteryPreferenceKey(), true) ) {
 			if( !this.has_battery_frac || System.currentTimeMillis() > this.last_battery_time + 60000 ) {
 				// only check periodically - unclear if checking is costly in any way
@@ -815,21 +855,6 @@ public class DrawPreview {
 					Log.d(TAG, "Battery status is " + battery_level + " / " + battery_scale + " : " + battery_frac);
 			}
 			//battery_frac = 0.2999f; // test
-			int battery_x = (int) (5 * scale + 0.5f); // convert dps to pixels
-			int battery_y = top_y;
-			int battery_width = (int) (5 * scale + 0.5f); // convert dps to pixels
-			int battery_height = 4*battery_width;
-			if( ui_rotation == 90 || ui_rotation == 270 ) {
-				int diff = canvas.getWidth() - canvas.getHeight();
-				battery_x += diff/2;
-				battery_y -= diff/2;
-			}
-			if( ui_rotation == 90 ) {
-				battery_y = canvas.getHeight() - battery_y - battery_height;
-			}
-			if( ui_rotation == 180 ) {
-				battery_x = canvas.getWidth() - battery_x - battery_width;
-			}
 			boolean draw_battery = true;
 			if( battery_frac <= 0.05f ) {
 				// flash icon at this low level
@@ -844,15 +869,15 @@ public class DrawPreview {
 				canvas.drawRect(battery_x+1, battery_y+1+(1.0f-battery_frac)*(battery_height-2), battery_x+battery_width-1, battery_y+battery_height-1, p);
 			}
 		}
-		
+
 		boolean store_location = sharedPreferences.getBoolean(PreferenceKeys.getLocationPreferenceKey(), false);
 		if( store_location ) {
 			int location_x = (int) (20 * scale + 0.5f); // convert dps to pixels
 			int location_y = top_y;
 			if( ui_rotation == 90 || ui_rotation == 270 ) {
 				int diff = canvas.getWidth() - canvas.getHeight();
-				location_x += diff/2;
-				location_y -= diff/2;
+				location_x += diff / 2;
+				location_y -= diff / 2;
 			}
 			if( ui_rotation == 90 ) {
 				location_y = canvas.getHeight() - location_y - location_size;
@@ -863,9 +888,9 @@ public class DrawPreview {
 			location_dest.set(location_x, location_y, location_x + location_size, location_y + location_size);
 			if( applicationInterface.getLocation() != null ) {
 				canvas.drawBitmap(location_bitmap, null, location_dest, p);
-				int location_radius = location_size/10;
+				int location_radius = location_size / 10;
 				int indicator_x = location_x + location_size;
-				int indicator_y = location_y + location_radius/2 + 1;
+				int indicator_y = location_y + location_radius / 2 + 1;
 				p.setStyle(Paint.Style.FILL);
 				p.setColor(applicationInterface.getLocation().getAccuracy() < 25.01f ? Color.rgb(37, 155, 36) : Color.rgb(255, 235, 59)); // Green 500 or Yellow 500
 				canvas.drawCircle(indicator_x, indicator_y, location_radius, p);
