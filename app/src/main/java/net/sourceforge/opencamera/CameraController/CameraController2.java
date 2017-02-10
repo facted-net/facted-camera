@@ -6,6 +6,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
@@ -1772,9 +1773,19 @@ public class CameraController2 extends CameraController {
 
 	@Override
 	public void setOptimiseAEForDRO(boolean optimise_ae_for_dro) {
-		if (MyDebug.LOG)
-			Log.d(TAG, "clearCaptureExposureScaleStops");
-		this.optimise_ae_for_dro = optimise_ae_for_dro;
+		if( MyDebug.LOG )
+			Log.d(TAG, "setOptimiseAEForDRO: " + optimise_ae_for_dro);
+		boolean is_oneplus = Build.MANUFACTURER.toLowerCase(Locale.US).contains("oneplus");
+		if( is_oneplus ) {
+			// OnePlus 3T has preview corruption / camera freezing problems when using manual shutter speeds
+			// So best not to modify auto-exposure for DRO
+			this.optimise_ae_for_dro = false;
+			if( MyDebug.LOG )
+				Log.d(TAG, "don't modify ae for OnePlus");
+		}
+		else {
+			this.optimise_ae_for_dro = optimise_ae_for_dro;
+		}
 	}
 
 	@Override
@@ -2978,8 +2989,8 @@ public class CameraController2 extends CameraController {
 	   af trigger for fake flash mode can sometimes mean flash fires for too long and we get a worse
 	   result).
 	 */
-	//private final boolean do_af_trigger_for_continuous = false;
-	private final boolean do_af_trigger_for_continuous = true;
+	//private final static boolean do_af_trigger_for_continuous = false;
+	private final static boolean do_af_trigger_for_continuous = true;
 
 	@Override
 	public void autoFocus(final AutoFocusCallback cb, boolean capture_follows_autofocus_hint) {
@@ -3411,6 +3422,18 @@ public class CameraController2 extends CameraController {
 					requests.add( stillBuilder.build() );
 				}
 			}
+
+			/*
+			// testing:
+			requests.add( stillBuilder.build() );
+			requests.add( stillBuilder.build() );
+			requests.add( stillBuilder.build() );
+			requests.add( stillBuilder.build() );
+			if( MyDebug.LOG )
+				Log.d(TAG, "set RequestTag.CAPTURE for last burst request");
+			stillBuilder.setTag(RequestTag.CAPTURE);
+			requests.add( stillBuilder.build() );
+			*/
 
 			n_burst = requests.size();
 			if( MyDebug.LOG )
@@ -3988,7 +4011,11 @@ public class CameraController2 extends CameraController {
 			if( use_fake_precapture_mode && ( fake_precapture_torch_focus_performed || fake_precapture_torch_performed ) && flash_mode != null && flash_mode == CameraMetadata.FLASH_MODE_TORCH ) {
 				// don't change ae state while torch is on for fake flash
 			}
-			else if( ae_state != capture_result_ae ) {
+			else if( ae_state == null ) {
+				capture_result_ae = null;
+				is_flash_required = false;
+			}
+			else if( !ae_state.equals(capture_result_ae) ) {
 				// need to store this before calling the autofocus callbacks below
 				if( MyDebug.LOG )
 					Log.d(TAG, "CONTROL_AE_STATE changed from " + capture_result_ae + " to " + ae_state);
