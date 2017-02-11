@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="app_name">Open Camera</string>
+    <string name="app_name">Facted Camera</string>
     <string name="action_settings">Ajustes</string>
     <string name="action_popup">Ajustes de ventana emergente</string>
     <string name="intro_text">Toca para enfocar y pulsa el boton de la cámara azul para realizar la foto. Para más ayuda pulsa Ayuda Online desde los ajustes. Open Camera es completamente gratuito. Si te gusta esta app, considera comprar mi versión de pago :) (mira en Ajustes o en Ayuda Online).\n\nPolítica de privacidad: Se requiere el permiso de Localización para geotagging, pero esta deshabilitado por defecto. Si se habilita, tu localización será codificada en los archivos guardados (y solo se usara para este propósito).</string>
