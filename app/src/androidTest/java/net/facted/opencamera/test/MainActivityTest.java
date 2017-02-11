@@ -2907,7 +2907,7 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 		SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(mActivity);
 		SharedPreferences.Editor editor = settings.edit();
 		editor.putBoolean(PreferenceKeys.getUsingSAFPreferenceKey(), true);
-		editor.putString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "content://com.android.externalstorage.documents/tree/primary%3ADCIM%2FOpenCamera");
+		editor.putString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "content://com.android.externalstorage.documents/tree/primary%3ADCIM%2FFactedCamera");
 		editor.apply();
 		updateForSettings();
 
@@ -3328,7 +3328,7 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 		SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(mActivity);
 		SharedPreferences.Editor editor = settings.edit();
 		editor.putBoolean(PreferenceKeys.getUsingSAFPreferenceKey(), true);
-		editor.putString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "content://com.android.externalstorage.documents/tree/primary%3ADCIM%2FOpenCamera");
+		editor.putString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "content://com.android.externalstorage.documents/tree/primary%3ADCIM%2FFactedCamera");
 		editor.apply();
 		updateForSettings();
 
@@ -3472,7 +3472,7 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 		SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(mActivity);
 		SharedPreferences.Editor editor = settings.edit();
 		editor.putBoolean(PreferenceKeys.getUsingSAFPreferenceKey(), true);
-		editor.putString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "content://com.android.externalstorage.documents/tree/primary%3ADCIM%2FOpenCamera");
+		editor.putString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "content://com.android.externalstorage.documents/tree/primary%3ADCIM%2FFactedCamera");
 		editor.apply();
 		updateForSettings();
 
@@ -4165,7 +4165,7 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 		SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(mActivity);
 		SharedPreferences.Editor editor = settings.edit();
 		editor.putBoolean(PreferenceKeys.getUsingSAFPreferenceKey(), true);
-		editor.putString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "content://com.android.externalstorage.documents/tree/primary%3ADCIM%2FOpenCamera");
+		editor.putString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "content://com.android.externalstorage.documents/tree/primary%3ADCIM%2FFactedCamera");
 		editor.apply();
 		updateForSettings();
 
@@ -4675,7 +4675,7 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 		SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(mActivity);
 		SharedPreferences.Editor editor = settings.edit();
 		editor.putBoolean(PreferenceKeys.getUsingSAFPreferenceKey(), true);
-		editor.putString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "content://com.android.externalstorage.documents/tree/primary%3ADCIM%2FOpenCamera");
+		editor.putString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "content://com.android.externalstorage.documents/tree/primary%3ADCIM%2FFactedCamera");
 		editor.apply();
 		updateForSettings();
 
@@ -6409,10 +6409,10 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 			SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(mActivity);
 			SharedPreferences.Editor editor = settings.edit();
 			if( use_saf ) {
-				editor.putString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "content://com.android.externalstorage.documents/tree/primary%3ADCIM%2FOpenCamera");
+				editor.putString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "content://com.android.externalstorage.documents/tree/primary%3ADCIM%2FFactedCamera");
 			}
 			else {
-				editor.putString(PreferenceKeys.getSaveLocationPreferenceKey(), "OpenCamera");
+				editor.putString(PreferenceKeys.getSaveLocationPreferenceKey(), "FactedCamera");
 			}
 			editor.apply();
 		}
@@ -6422,21 +6422,21 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 	 */
 	public void testCreateSaveFolder1() {
 		Log.d(TAG, "testCreateSaveFolder1");
-		subTestCreateSaveFolder(false, "OpenCameraTest", true);
+		subTestCreateSaveFolder(false, "FactedCameraTest", true);
 	}
 
 	/** Tests taking a photo with a new save folder.
 	 */
 	public void testCreateSaveFolder2() {
 		Log.d(TAG, "testCreateSaveFolder2");
-		subTestCreateSaveFolder(false, "OpenCameraTest/", true);
+		subTestCreateSaveFolder(false, "FactedCameraTest/", true);
 	}
 
 	/** Tests taking a photo with a new save folder.
 	 */
 	public void testCreateSaveFolder3() {
 		Log.d(TAG, "testCreateSaveFolder3");
-		subTestCreateSaveFolder(false, "OpenCameraTest_a/OpenCameraTest_b", true);
+		subTestCreateSaveFolder(false, "FactedCameraTest_a/FactedCameraTest_b", true);
 	}
 
 	/** Tests taking a photo with a new save folder.
@@ -6444,7 +6444,7 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 	@SuppressLint("SdCardPath")
 	public void testCreateSaveFolder4() {
 		Log.d(TAG, "testCreateSaveFolder4");
-		subTestCreateSaveFolder(false, "/sdcard/Pictures/OpenCameraTest", true);
+		subTestCreateSaveFolder(false, "/sdcard/Pictures/FactedCameraTest", true);
 	}
 
 	/** Tests taking a photo with a new save folder.
@@ -6483,7 +6483,7 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 		{
 			SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(mActivity);
 			SharedPreferences.Editor editor = settings.edit();
-			editor.putString(PreferenceKeys.getSaveLocationPreferenceKey(), "OpenCameraTest");
+			editor.putString(PreferenceKeys.getSaveLocationPreferenceKey(), "FactedCameraTest");
 			editor.apply();
 			updateForSettings();
 		}
@@ -6521,7 +6521,7 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 		{
 			SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(mActivity);
 			SharedPreferences.Editor editor = settings.edit();
-			editor.putString(PreferenceKeys.getSaveLocationPreferenceKey(), "/OpenCameraTest");
+			editor.putString(PreferenceKeys.getSaveLocationPreferenceKey(), "/FactedCameraTest");
 			editor.apply();
 			updateForSettings();
 		}
@@ -6554,7 +6554,7 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 		String current_folder;
 		{
 			SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(mActivity);
-			current_folder = use_saf ? settings.getString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "") : settings.getString(PreferenceKeys.getSaveLocationPreferenceKey(), "OpenCamera");
+			current_folder = use_saf ? settings.getString(PreferenceKeys.getSaveLocationSAFPreferenceKey(), "") : settings.getString(PreferenceKeys.getSaveLocationPreferenceKey(), "FactedCamera");
 			Log.d(TAG, "current_folder: " + current_folder);
 			Log.d(TAG, "save_location_history entry: " + save_location_history.get(0));
 			assertTrue(save_location_history.get(0).equals(current_folder));
@@ -6650,7 +6650,7 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 		}
 
 		{
-			String save_folder = "content://com.android.externalstorage.documents/tree/primary%3ADCIM/OpenCamera";
+			String save_folder = "content://com.android.externalstorage.documents/tree/primary%3ADCIM/FactedCamera";
 			SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(mActivity);
 			SharedPreferences.Editor editor = settings.edit();
 			editor.putBoolean(PreferenceKeys.getUsingSAFPreferenceKey(), true);
@@ -6863,8 +6863,8 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 
 	/* Test for failing to open camera.
 	 */
-	public void testFailOpenCamera() throws InterruptedException {
-		Log.d(TAG, "testFailOpenCamera");
+	public void testFailFactedCamera() throws InterruptedException {
+		Log.d(TAG, "testFailFactedCamera");
 
 		setToDefault();
 
@@ -7180,8 +7180,8 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 
 	/** The following testHDRX tests test the HDR algorithm on a given set of input images.
 	 *  By testing on a fixed sample, this makes it easier to finetune the HDR algorithm for quality and performance.
-	 *  To use these tests, the testdata/ subfolder should be manually copied to the test device in the DCIM/testOpenCamera/
-	 *  folder (so you have DCIM/testOpenCamera/testdata/). We don't use assets/ as we'd end up with huge APK sizes which takes
+	 *  To use these tests, the testdata/ subfolder should be manually copied to the test device in the DCIM/testFactedCamera/
+	 *  folder (so you have DCIM/testFactedCamera/testdata/). We don't use assets/ as we'd end up with huge APK sizes which takes
 	 *  time to transfer to the device everytime we run the tests.
 	 */
 	private void subTestHDR(List<Bitmap> inputs, String output_name, boolean test_dro) throws IOException, InterruptedException {
@@ -7238,7 +7238,7 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 		}
 	}
 	
-	final private String hdr_images_path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM) + "/testOpenCamera/testdata/hdrsamples/";
+	final private String hdr_images_path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM) + "/testFactedCamera/testdata/hdrsamples/";
 
 	/** Tests HDR algorithm on test samples "saintpaul".
 	 * @throws IOException
@@ -8020,7 +8020,7 @@ public class MainActivityTest extends ActivityInstrumentationTestCase2<MainActiv
 
 	/** Tests HDR algorithm on test samples "testHDRtemp".
 	 *  Used for one-off testing, or to recreate HDR images from the base exposures to test an updated alorithm.
-	 *  The test images should be copied to the test device into DCIM/testOpenCamera/testdata/hdrsamples/testHDRtemp/ .
+	 *  The test images should be copied to the test device into DCIM/testFactedCamera/testdata/hdrsamples/testHDRtemp/ .
 	 * @throws IOException
 	 * @throws InterruptedException 
 	 */

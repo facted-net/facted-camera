@@ -125,7 +125,7 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 	private boolean block_startup_toast = false; // used when returning from Settings/Popup - if we're displaying a toast anyway, don't want to display the info toast too
 
 	// for testing; must be volatile for test project reading the state
-	public boolean is_test; // whether called from OpenCamera.test testing
+	public boolean is_test; // whether called from FactedCamera.test testing
 	public volatile Bitmap gallery_bitmap;
 	public volatile boolean test_low_memory;
 	public volatile boolean test_have_angle;
@@ -3022,7 +3022,7 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 	                // contacts-related task you need to do.
 	        		if( MyDebug.LOG )
 	        			Log.d(TAG, "camera permission granted");
-	            	preview.retryOpenCamera();
+	            	preview.retryFactedCamera();
 	            }
 	            else {
 	        		if( MyDebug.LOG )
@@ -3042,7 +3042,7 @@ public class MainActivity extends Activity implements AudioListener.AudioListene
 	                // contacts-related task you need to do.
 	        		if( MyDebug.LOG )
 	        			Log.d(TAG, "storage permission granted");
-	            	preview.retryOpenCamera();
+	            	preview.retryFactedCamera();
 	            }
 	            else {
 	        		if( MyDebug.LOG )

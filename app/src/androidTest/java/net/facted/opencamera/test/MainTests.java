@@ -53,7 +53,7 @@ public class MainTests {
 		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testColorEffect"));
 		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testWhiteBalance"));
 		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testImageQuality"));
-		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testFailOpenCamera"));
+		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testFailFactedCamera"));
 		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testAudioControlIcon"));
 		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testOnError"));
 		suite.addTest(TestSuite.createTest(MainActivityTest.class, "testGPSString"));

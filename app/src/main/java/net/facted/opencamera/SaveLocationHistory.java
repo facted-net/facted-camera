@@ -41,7 +41,7 @@ public class SaveLocationHistory {
         }
         // also update, just in case a new folder has been set
 		updateFolderHistory(folder_name, false); // update_icon can be false, as updateGalleryIcon() is called later in MainActivity.onResume()
-		//updateFolderHistory("/sdcard/Pictures/OpenCameraTest");
+		//updateFolderHistory("/sdcard/Pictures/FactedCamera");
 	}
 
 	/** Updates the save history with the current save location (should be called after changing the save location).

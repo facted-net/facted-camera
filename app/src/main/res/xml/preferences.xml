@@ -195,7 +195,7 @@
 		        android:dialogTitle="@string/preference_save_location"
 		        android:dialogMessage="@string/preference_save_location_summary"
 		        android:inputType="text"
-	            android:defaultValue="OpenCamera"
+	            android:defaultValue="FactedCamera"
 		        />
 	
 	        <!--  if we move this to another PreferenceGroup, we should update code to remove this Preference -->

@@ -97,7 +97,7 @@ public class FolderChooserDialog extends DialogFragment {
 		if( MyDebug.LOG )
 			Log.d(TAG, "onCreateDialog");
 		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this.getActivity());
-		String folder_name = sharedPreferences.getString(PreferenceKeys.getSaveLocationPreferenceKey(), "OpenCamera");
+		String folder_name = sharedPreferences.getString(PreferenceKeys.getSaveLocationPreferenceKey(), "FactedCamera");
 		if( MyDebug.LOG )
 			Log.d(TAG, "folder_name: " + folder_name);
 		File new_folder = StorageUtils.getImageFolder(folder_name);
@@ -167,7 +167,7 @@ public class FolderChooserDialog extends DialogFragment {
 			// see testFolderChooserInvalid()
 			if( MyDebug.LOG )
 				Log.d(TAG, "failed to read folder");
-			// note that we reset to DCIM rather than DCIM/OpenCamera, just to increase likelihood of getting back to a valid state
+			// note that we reset to DCIM rather than DCIM/FactedCamera, just to increase likelihood of getting back to a valid state
 			refreshList(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM));
 			if( current_folder == null ) {
 				if( MyDebug.LOG )

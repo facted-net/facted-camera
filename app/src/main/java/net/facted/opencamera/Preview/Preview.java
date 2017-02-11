@@ -251,7 +251,7 @@ public class Preview implements SurfaceHolder.Callback, TextureView.SurfaceTextu
 	private boolean autofocus_in_continuous_mode;
 
 	// for testing; must be volatile for test project reading the state
-	private boolean is_test; // whether called from OpenCamera.test testing
+	private boolean is_test; // whether called from FactedCamera.test testing
 	public volatile int count_cameraStartPreview;
 	public volatile int count_cameraAutoFocus;
 	public volatile int count_cameraTakePicture;
@@ -1240,9 +1240,9 @@ public class Preview implements SurfaceHolder.Callback, TextureView.SurfaceTextu
 
 	/** Try to reopen the camera, if not currently open (e.g., permission wasn't granted, but now it is).
 	 */
-	public void retryOpenCamera() {
+	public void retryFactedCamera() {
 		if( MyDebug.LOG )
-			Log.d(TAG, "retryOpenCamera()");
+			Log.d(TAG, "retryFactedCamera()");
         if( camera_controller == null ) {
     		if( MyDebug.LOG )
     			Log.d(TAG, "try to reopen camera");
