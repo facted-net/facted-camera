@@ -45,6 +45,9 @@ import com.adobe.internal.xmp.XMPException;
 
 import provenj.Enclosure;
 import provenj.Metadata;
+import provenj.BitcoinInfo;
+import provenj.EthereumInfo;
+
 
 /** Handles the saving (and any required processing) of photos.
  */
@@ -1238,6 +1241,10 @@ public class ImageSaver extends Thread {
 				metadata.setPreviousIPFSHash(sharedPreferences.getString(PreferenceKeys.getPreviousIPFSHashPreferenceKey(),null));
 				metadata.setPreviousFileHashes(sharedPreferences.getString(PreferenceKeys.getPreviousFileHashesPreferenceKey(),null));
 				metadata.setFileName(picFile.getName());
+				BitcoinInfo bitcoinInfo = new BitcoinInfo();
+				metadata = bitcoinInfo.apply(metadata);
+				EthereumInfo ethereumInfo = new EthereumInfo();
+				metadata = ethereumInfo.apply(metadata);
 				Enclosure enclosure = new Enclosure();
 				metadata = enclosure.fill(picFile, metadata, true);
 

@@ -20,6 +20,10 @@ android {
           enabled true
         }
         multiDexEnabled = true
+        dexOptions {
+            preDexLibraries = false
+            javaMaxHeapSize "4g"
+        }
     }
 
     compileOptions {
@@ -42,11 +46,17 @@ android {
 
 dependencies {
     compile 'com.android.support:support-v4:25.0.1'
-    compile ('com.github.1AmOXsGnfXdbNg3RMTyPCHkn2aT:provenj:v4.0.1') {
-        exclude group: 'org.json', module: 'json'
+    compile ('com.github.1AmOXsGnfXdbNg3RMTyPCHkn2aT:provenj:v4.1.1'){
+       transitive=true
     }
+    compile group: 'org.json', name: 'json', version: '20160810'
+    compile group: 'com.github.celeduc', name: 'ipfs-api-kotlin', version: '0.9999999'
+    compile group: 'com.github.multiformats', name: 'java-multibase', version: 'v1.0.0'
     compile group: 'com.adobe.xmp', name: 'xmpcore', version: '6.1.10'
+    compile group: 'com.j2html', name: 'j2html', version: '0.7'
     compile group: 'com.google.guava', name: 'guava', version: '20.0'
+    compile group: 'com.squareup.okhttp3', name: 'okhttp', version: '3.6.0'
+
 
     testCompile 'junit:junit:4.12'
 
