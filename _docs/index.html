@@ -262,7 +262,7 @@ available from
 <!-- note, the rows and cols attributes are overridden by the style width/height, but we still specify the rows/cols attributes for older browsers (and also required for html validation) -->
 <textarea readonly rows="20" cols="80" style="width:100%; height:50%; white-space: pre; word-wrap: normal; overflow-x: scroll">
 
-Version 1.37 (Work in progress)
+Version 1.37 (2017/02/11)
 
 FIXED   Crash on devices not supporting scene mode.
 FIXED   Crash if failed to start audio listener (for "loud noise").
@@ -279,10 +279,12 @@ FIXED   Shutter sound option wasn't working for Camera2 API unless a photo had
         previously been taken in the same session.
 ADDED   Display flash symbol for Camera2 API in flash auto mode, to indicate
         whether flash will fire.
+UPDATED Improved battery life when going idle.
 UPDATED Improved support for flash auto decision on when to take a photo, when
         using "alternative" flash method and/or HDR, expo bracketing for
         Camera2 API (it now matches the decision when not using the alternative
         flash method).
+UPDATED Finer control for manual seekbars.
 UPDATED Display "Capturing..." when manual exposure time is 0.5s or longer.
 UPDATED Improved popup view so selected button is centred rather than aligned
         left.

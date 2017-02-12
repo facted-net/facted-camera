@@ -258,6 +258,7 @@ public class Preview implements SurfaceHolder.Callback, TextureView.SurfaceTextu
 	public volatile int count_cameraContinuousFocusMoving;
 	public volatile boolean test_fail_open_camera;
 	public volatile boolean test_video_failure;
+	public volatile boolean test_ticker_called; // set from MySurfaceView or CanvasView
 
 	public Preview(ApplicationInterface applicationInterface, ViewGroup parent) {
 		if( MyDebug.LOG ) {
@@ -3790,15 +3791,17 @@ public class Preview implements SurfaceHolder.Callback, TextureView.SurfaceTextu
 	    		if( MyDebug.LOG )
 	    			Log.d(TAG, "pref_audio_src: " + pref_audio_src);
         		int audio_source = MediaRecorder.AudioSource.CAMCORDER;
-        		if( pref_audio_src.equals("audio_src_mic") ) {
-	        		audio_source = MediaRecorder.AudioSource.MIC;
-        		}
-        		else if( pref_audio_src.equals("audio_src_default") ) {
-	        		audio_source = MediaRecorder.AudioSource.DEFAULT;
-        		}
-        		else if( pref_audio_src.equals("audio_src_voice_communication") ) {
-	        		audio_source = MediaRecorder.AudioSource.VOICE_COMMUNICATION;
-        		}
+				switch(pref_audio_src) {
+					case "audio_src_mic":
+						audio_source = MediaRecorder.AudioSource.MIC;
+						break;
+					case "audio_src_default":
+						audio_source = MediaRecorder.AudioSource.DEFAULT;
+						break;
+					case "audio_src_voice_communication":
+						audio_source = MediaRecorder.AudioSource.VOICE_COMMUNICATION;
+						break;
+				}
 	    		if( MyDebug.LOG )
 	    			Log.d(TAG, "audio_source: " + audio_source);
 				video_recorder.setAudioSource(audio_source);
@@ -5149,6 +5152,9 @@ public class Preview implements SurfaceHolder.Callback, TextureView.SurfaceTextu
 		if( MyDebug.LOG )
 			Log.d(TAG, "onResume");
 		this.app_is_paused = false;
+		cameraSurface.onResume();
+		if( canvasView != null )
+			canvasView.onResume();
 		this.openCamera();
     }
 
@@ -5157,6 +5163,9 @@ public class Preview implements SurfaceHolder.Callback, TextureView.SurfaceTextu
 			Log.d(TAG, "onPause");
 		this.app_is_paused = true;
 		this.closeCamera();
+		cameraSurface.onPause();
+		if( canvasView != null )
+			canvasView.onPause();
     }
     
     /*void updateUIPlacement() {
