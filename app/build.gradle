@@ -46,7 +46,7 @@ android {
 
 dependencies {
     compile 'com.android.support:support-v4:25.0.1'
-    compile ('com.github.proven-systems:provenj:v5.0.0'){
+    compile ('com.github.proven-systems:provenj:v5.1.0'){
        transitive=true
     }
     compile group: 'org.json', name: 'json', version: '20160810'

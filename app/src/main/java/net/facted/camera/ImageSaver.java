@@ -47,6 +47,7 @@ import provenj.Enclosure;
 import provenj.Metadata;
 import provenj.BitcoinInfo;
 import provenj.EthereumInfo;
+import provenj.Publisher;
 
 
 /** Handles the saving (and any required processing) of photos.
@@ -1253,11 +1254,17 @@ public class ImageSaver extends Thread {
 				if( MyDebug.LOG )
 					Log.d(TAG, "ipfsHash: " + ipfsHash);
 
+				String sPublish = Publisher.publishToGateway(ipfsHash);
+				if( MyDebug.LOG )
+					Log.d(TAG, "Ethereum Published: " + sPublish);
+
 				// Save attributes of file for later use
 				SharedPreferences.Editor editor = sharedPreferences.edit();
 				editor.putString(PreferenceKeys.getPreviousIPFSHashPreferenceKey(), ipfsHash);
 				editor.putString(PreferenceKeys.getPreviousFileHashesPreferenceKey(), metadata.getFileHashes());
 				editor.apply();
+
+
 
 				if( saveUri != null ) {
 	            	copyFileToUri(main_activity, saveUri, picFile);
