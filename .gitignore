@@ -8,6 +8,7 @@ _other/
 build/
 gfx/
 testdata/
+facted_camera_deploy/
 
 *.db
 *.iml
