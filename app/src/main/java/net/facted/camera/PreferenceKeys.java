@@ -415,6 +415,10 @@ public class PreferenceKeys {
     	return "preference_immersive_mode";
     }
 
+    public static String getPreviousGUIDPreferenceKey() {
+        return "previous_guid";
+    }
+
     public static String getPreviousIPFSHashPreferenceKey() {
         return "previous_ipfs_hash";
     }

@@ -70,7 +70,9 @@ public class ImageSaver extends Thread {
 	 */
 	private int n_images_to_save = 0;
 	private final BlockingQueue<Request> queue = new ArrayBlockingQueue<>(1); // since we remove from the queue and then process in the saver thread, in practice the number of background photos - including the one being processed - is one more than the length of this queue
-	
+	private BitcoinInfo bitcoinInfo = new BitcoinInfo();
+	private EthereumInfo ethereumInfo = new EthereumInfo();
+
 	private static class Request {
 		enum Type {
 			JPEG,
@@ -1239,32 +1241,25 @@ public class ImageSaver extends Thread {
 				SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(main_activity);
 
 				Metadata metadata = new Metadata();
-				metadata.setPreviousIPFSHash(sharedPreferences.getString(PreferenceKeys.getPreviousIPFSHashPreferenceKey(),null));
-				metadata.setPreviousFileHashes(sharedPreferences.getString(PreferenceKeys.getPreviousFileHashesPreferenceKey(),null));
+				metadata.setPreviousIPFSHash(sharedPreferences.getString(PreferenceKeys.getPreviousIPFSHashPreferenceKey(),""));
+				metadata.setPreviousFileHashes(sharedPreferences.getString(PreferenceKeys.getPreviousFileHashesPreferenceKey(),""));
+				String previousGUID = sharedPreferences.getString(PreferenceKeys.getPreviousGUIDPreferenceKey(),"");
+				if ("" != previousGUID )
+					metadata.setPreviousGUID(previousGUID);
 				metadata.setFileName(picFile.getName());
-				BitcoinInfo bitcoinInfo = new BitcoinInfo();
 				metadata = bitcoinInfo.apply(metadata);
-				EthereumInfo ethereumInfo = new EthereumInfo();
 				metadata = ethereumInfo.apply(metadata);
 				Enclosure enclosure = new Enclosure();
 				metadata = enclosure.fill(picFile, metadata, true);
 
-				// publish to IPFS
-				String ipfsHash = enclosure.publish();
-				if( MyDebug.LOG )
-					Log.d(TAG, "ipfsHash: " + ipfsHash);
-
-				String sPublish = Publisher.publishToGateway(ipfsHash);
-				if( MyDebug.LOG )
-					Log.d(TAG, "Ethereum Published: " + sPublish);
-
-				// Save attributes of file for later use
+				// We at least now know the hashes and the GUID, so put them in the next pic
 				SharedPreferences.Editor editor = sharedPreferences.edit();
-				editor.putString(PreferenceKeys.getPreviousIPFSHashPreferenceKey(), ipfsHash);
 				editor.putString(PreferenceKeys.getPreviousFileHashesPreferenceKey(), metadata.getFileHashes());
+				editor.putString(PreferenceKeys.getPreviousGUIDPreferenceKey(), metadata.getGUID().toString());
 				editor.apply();
 
-
+				// Potentially blocking operations: pushing to IPFS, publishing to Ethereum
+				new PublishTask().doInBackground(enclosure);
 
 				if( saveUri != null ) {
 	            	copyFileToUri(main_activity, saveUri, picFile);
@@ -1403,6 +1398,35 @@ public class ImageSaver extends Thread {
 			Log.d(TAG, "Save single image performance: total time: " + (System.currentTimeMillis() - time_s));
 		}
         return success;
+	}
+
+	protected class PublishTask extends android.os.AsyncTask<Enclosure, Void, Integer> {
+		protected Integer doInBackground(Enclosure... enclosures) {
+			String ipfsHash = "";
+			try {
+				// publish to IPFS
+				ipfsHash = enclosures[0].publish();
+				if (MyDebug.LOG)
+					Log.d(TAG, "ipfsHash: " + ipfsHash);
+
+				String sPublish = Publisher.publishToGateway(ipfsHash);
+				if (MyDebug.LOG)
+					Log.d(TAG, "Published: " + sPublish);
+			}
+			catch (Exception e) {
+				if( MyDebug.LOG )
+					Log.e(TAG, "Publishing failed: " + e.getMessage());
+				e.printStackTrace();
+			}
+
+			// Save IPFS hash for next picture
+			SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(main_activity);
+			SharedPreferences.Editor editor = sharedPreferences.edit();
+			editor.putString(PreferenceKeys.getPreviousIPFSHashPreferenceKey(), ipfsHash);
+			editor.apply();
+
+			return 0;
+		}
 	}
 
 	@SuppressWarnings("deprecation")

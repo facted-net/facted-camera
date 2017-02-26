@@ -7,8 +7,8 @@ android {
 
     defaultConfig {
         applicationId "net.facted.camera"
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1"
         minSdkVersion 15
         targetSdkVersion 25
 
@@ -48,7 +48,7 @@ android {
 
 dependencies {
     compile 'com.android.support:support-v4:25.0.1'
-    compile ('com.github.proven-systems:provenj:v5.1.0'){
+    compile ('com.github.proven-systems:provenj:v5.2.0'){
        transitive=true
     }
     compile group: 'org.json', name: 'json', version: '20160810'
