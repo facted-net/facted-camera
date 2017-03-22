@@ -6,4 +6,4 @@ cp RELEASE_NOTES.md facted_camera_deploy/RELEASE_NOTES
 cp gpl-3.0.txt facted_camera_deploy/LICENSE
 OUTPUT=$(ipfs add -q -r facted_camera_deploy | tail -1)
 ipfs pin add $OUTPUT
-ipfs name publish -k=factedcamerakey $OUTPUT
+#ipfs name publish -k=factedcamerakey $OUTPUT
